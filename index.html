@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Thailand Student Density Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f8fafc;
+        }
+
+        #map {
+            height: 600px;
+            width: 100%;
+            border-radius: 1rem;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+            z-index: 1;
+        }
+
+        .info-panel {
+            transition: all 0.3s ease;
+        }
+
+        .custom-tooltip {
+            background: white;
+            border: none;
+            border-radius: 8px;
+            box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1);
+            padding: 10px;
+            font-weight: 600;
+        }
+
+        /* Loading Spinner */
+        .loader {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3b82f6;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+
+    <div class="max-w-6xl mx-auto">
+        <!-- Header -->
+        <header class="mb-8 text-center md:text-left">
+            <h1 class="text-3xl font-extrabold text-slate-800">Thailand Student Density Analytics</h1>
+            <p class="text-slate-500">Interactive geographic visualization of student populations per province</p>
+        </header>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            
+            <!-- Left Panel: Search and Stats -->
+            <div class="lg:col-span-1 space-y-6">
+                
+                <!-- Search Section -->
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+                    <label for="provinceSearch" class="block text-sm font-semibold text-slate-700 mb-2">Search Province</label>
+                    <div class="relative">
+                        <input type="text" id="provinceSearch" placeholder="e.g. Bangkok, Chiang Mai..." 
+                               class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none transition-all">
+                        <div id="searchResults" class="absolute z-10 w-full bg-white mt-1 rounded-xl shadow-lg border border-slate-100 hidden max-h-48 overflow-y-auto">
+                            <!-- Results populate here -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Stats Display -->
+                <div id="statsCard" class="bg-blue-600 p-6 rounded-2xl shadow-lg text-white hidden">
+                    <h2 id="displayProvinceName" class="text-2xl font-bold mb-4 border-b border-blue-400 pb-2">Province Name</h2>
+                    
+                    <div class="space-y-4">
+                        <div>
+                            <p class="text-blue-100 text-xs uppercase tracking-wider font-semibold">Total Students</p>
+                            <p id="displayStudentCount" class="text-3xl font-bold">0</p>
+                        </div>
+                        <div>
+                            <p class="text-blue-100 text-xs uppercase tracking-wider font-semibold">Area (sq. km)</p>
+                            <p id="displayArea" class="text-xl font-medium">0.00</p>
+                        </div>
+                        <div class="bg-blue-700 p-4 rounded-xl">
+                            <p class="text-blue-100 text-xs uppercase tracking-wider font-semibold">Density</p>
+                            <p id="displayDensity" class="text-2xl font-bold">0.00 <span class="text-sm font-normal">students/km²</span></p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Instructions/Default State -->
+                <div id="placeholderCard" class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col items-center justify-center text-center py-12">
+                    <div class="bg-blue-50 p-4 rounded-full mb-4">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                        </svg>
+                    </div>
+                    <p class="text-slate-600 font-medium">Search for a province or click on the map to see detailed statistics.</p>
+                </div>
+            </div>
+
+            <!-- Right Panel: The Heatmap -->
+            <div class="lg:col-span-2">
+                <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 relative">
+                    <div id="map-loader" class="absolute inset-0 z-20 bg-white bg-opacity-80 flex items-center justify-center rounded-2xl">
+                        <div class="loader"></div>
+                    </div>
+                    <div id="map"></div>
+                    
+                    <!-- Legend -->
+                    <div class="mt-4 flex flex-wrap items-center justify-center gap-4 text-xs font-semibold text-slate-600">
+                        <span>Density Legend:</span>
+                        <div class="flex items-center gap-1"><div class="w-3 h-3 rounded" style="background: #eff6ff"></div> 0-10</div>
+                        <div class="flex items-center gap-1"><div class="w-3 h-3 rounded" style="background: #bfdbfe"></div> 10-25</div>
+                        <div class="flex items-center gap-1"><div class="w-3 h-3 rounded" style="background: #60a5fa"></div> 25-50</div>
+                        <div class="flex items-center gap-1"><div class="w-3 h-3 rounded" style="background: #2563eb"></div> 50-100</div>
+                        <div class="flex items-center gap-1"><div class="w-3 h-3 rounded" style="background: #1e3a8a"></div> 100+</div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        // Data derived from the provided CSV
+        const rawData = `ProvinceName,พื้นที่ (ตร.กม.),StudentCount,Students/sq.km
+กระบี่,4708.51,107984,22.93379434
+กรุงเทพมหานคร,1568.74,999183,636.9334625
+กาญจนบุรี,19483.15,161836,8.306459684
+กาฬสินธุ์,6946.75,181215,26.08629935
+กำแพงเพชร,8607.49,119329,13.86339107
+ขอนแก่น,10885.99,341217,31.3445998
+จันทบุรี,6338,96097,15.1620385
+ฉะเชิงเทรา,5351,134945,25.21865072
+ชลบุรี,4611.83,360669,78.20518102
+ชัยนาท,2469.75,49629,20.09474643
+ชัยภูมิ,12778.3,186989,14.63332306
+ชุมพร,6010.85,86012,14.30945708
+เชียงราย,11678.37,218084,18.67418131
+เชียงใหม่,20107.06,323075,16.06773934
+ตรัง,4917.52,118471,24.09161325
+ตราด,2819,38011,13.48385952
+ตาก,16406.65,119853,7.305147608
+นครนายก,2122,46722,22.01790763
+นครปฐม,2168.33,181240,83.58506311
+นครพนม,5512.67,118124,21.42772879
+นครราชสีมา,20493.96,441999,21.56728129
+นครศรีธรรมราช,9942.5,310183,31.1976867
+นครสวรรค์,9597.68,172935,18.01841695
+นนทบุรี,622.3,212759,341.8913707
+นราธิวาส,4475.43,188201,42.05204863
+น่าน,11472.13,83226,7.254624911
+บึงกาฬ,4305,79822,18.5416957
+บุรีรัมย์,10322.89,271243,26.27587855
+ปทุมธานี,1525.86,236237,154.8221986
+ประจวบคีรีขันธ์,6367.62,88730,13.93456268
+ปราจีนบุรี,4762.36,92911,19.5094449
+ปัตตานี,1940.36,171434,88.35164609
+พระนครศรีอยุธยา,2556.64,153597,60.07767929
+พะเยา,6335.06,73909,11.66666191
+พังงา,4170.9,43851,10.51355823
+พัทลุง,3424.47,94986,27.73742185
+พิจิตร,4531.01,84755,18.70554247
+พิษณุโลก,10815.85,148785,13.75619577
+เพชรบุรี,6225.14,84547,13.58154194
+เพชรบูรณ์,12668.42,170425,13.45274313
+แพร่,6538.6,73902,11.30241948
+ภูเก็ต,543.03,79234,145.9109073
+มหาสารคาม,5291.68,159355,30.11425483
+มุกดาหาร,4339.83,67741,15.60913676
+แม่ฮ่องสอน,12681.26,56341,4.442855048
+ยโสธร,4161.66,100473,24.14252966
+ยะลา,4521.08,144551,31.97267025
+ร้อยเอ็ด,8299.45,220241,26.5368187
+ระนอง,3298.05,37777,11.45434423
+ระยอง,3552,164943,46.43665541
+ราชบุรี,5196.46,158979,30.59371187
+ลพบุรี,6199.75,123498,19.91983548
+ลำปาง,12533.96,112103,8.943941101
+ลำพูน,4505.88,62983,13.97795769
+เลย,11424.61,114886,10.05597951
+ศรีสะเกษ,8840,248744,28.13846154
+สกลนคร,9605.76,215682,22.4533965
+สงขลา,7393.89,301416,40.76557807
+สตูล,2478.98,64222,25.90662289
+สมุทรปราการ,1004.09,240398,239.4187772
+สมุทรสงคราม,416.71,28143,67.53617144
+สมุทรสาคร,872.35,108719,124.6277297
+สระแก้ว,7195.44,113429,15.76401165
+สระบุรี,3576.49,116630,32.61018485
+สิงห์บุรี,822.48,34861,42.38522517
+สุโขทัย,6596.09,95663,14.50298586
+สุพรรณบุรี,5358.01,139945,26.11883889
+สุราษฎร์ธานี,12891.47,192135,14.90404112
+สุรินทร์,8124.06,243224,29.93872509
+หนองคาย,3027.28,83794,27.6796332
+หนองบัวลำภู,3859.09,92697,24.02043487
+อ่างทอง,968.37,42220,43.59903756
+อำนาจเจริญ,3161.25,66974,21.18592329
+อุดรธานี,11730.3,272100,23.19633769
+อุตรดิตถ์,7838.59,71583,9.132126822
+อุทัยธานี,6730.25,55005,8.172801813
+อุบลราชธานี,15744.8,337325,21.42453381`;
+
+        const provinces = [];
+        const lines = rawData.trim().split('\n');
+        for (let i = 1; i < lines.length; i++) {
+            const cols = lines[i].split(',');
+            provinces.push({
+                name: cols[0],
+                area: parseFloat(cols[1]),
+                count: parseInt(cols[2]),
+                density: parseFloat(cols[3])
+            });
+        }
+
+        // Initialize Map
+        const map = L.map('map', {
+            zoomSnap: 0.1,
+            zoomDelta: 1
+        }).setView([13.7367, 100.5231], 5);
+        
+        let geoJsonLayer;
+
+        function getColor(d) {
+            return d > 100 ? '#1e3a8a' :
+                   d > 50  ? '#2563eb' :
+                   d > 25  ? '#60a5fa' :
+                   d > 10  ? '#bfdbfe' :
+                             '#eff6ff';
+        }
+
+        function style(feature) {
+            const provinceName = feature.properties.name || feature.properties.NAME_1;
+            // Clean name for matching (some geojsons have "Changwat ..." prefix)
+            const cleanName = provinceName.replace('Changwat ', '');
+            const data = provinces.find(p => p.name.includes(cleanName) || cleanName.includes(p.name));
+            const density = data ? data.density : 0;
+
+            return {
+                fillColor: getColor(density),
+                weight: 1.5,
+                opacity: 1,
+                color: 'white',
+                fillOpacity: 0.8
+            };
+        }
+
+        function onEachFeature(feature, layer) {
+            const provinceName = feature.properties.name || feature.properties.NAME_1;
+            const cleanName = provinceName.replace('Changwat ', '');
+            const data = provinces.find(p => p.name.includes(cleanName) || cleanName.includes(p.name));
+            
+            if (data) {
+                layer.bindTooltip(`
+                    <div class="custom-tooltip">
+                        <p class="text-blue-600 font-bold">${data.name}</p>
+                        <p class="text-slate-600 text-xs">Density: ${data.density.toFixed(2)} / km²</p>
+                    </div>
+                `, { sticky: true, className: 'leaflet-tooltip-custom' });
+            }
+
+            layer.on({
+                mouseover: (e) => {
+                    const layer = e.target;
+                    layer.setStyle({
+                        weight: 3,
+                        color: '#3b82f6',
+                        fillOpacity: 1
+                    });
+                    layer.bringToFront();
+                },
+                mouseout: (e) => {
+                    geoJsonLayer.resetStyle(e.target);
+                },
+                click: (e) => {
+                    if (data) selectProvince(data);
+                    map.fitBounds(e.target.getBounds());
+                }
+            });
+        }
+
+        // Load Thailand GeoJSON
+        fetch('https://raw.githubusercontent.com/apisit/thailand.json/master/thailand.json')
+            .then(res => res.json())
+            .then(data => {
+                geoJsonLayer = L.geoJson(data, {
+                    style: style,
+                    onEachFeature: onEachFeature
+                }).addTo(map);
+                map.fitBounds(geoJsonLayer.getBounds());
+                document.getElementById('map-loader').style.display = 'none';
+            })
+            .catch(err => {
+                console.error("Failed to load map data", err);
+                document.getElementById('map-loader').innerHTML = `<p class="text-red-500">Error loading map</p>`;
+            });
+
+        // Dashboard Logic
+        const searchInput = document.getElementById('provinceSearch');
+        const resultsDiv = document.getElementById('searchResults');
+        const statsCard = document.getElementById('statsCard');
+        const placeholderCard = document.getElementById('placeholderCard');
+
+        searchInput.addEventListener('input', (e) => {
+            const val = e.target.value.toLowerCase();
+            if (!val) {
+                resultsDiv.classList.add('hidden');
+                return;
+            }
+
+            const matches = provinces.filter(p => p.name.toLowerCase().includes(val));
+            if (matches.length > 0) {
+                resultsDiv.innerHTML = matches.map(m => `
+                    <div class="px-4 py-2 hover:bg-blue-50 cursor-pointer text-slate-700" onclick="handleResultClick('${m.name}')">
+                        ${m.name}
+                    </div>
+                `).join('');
+                resultsDiv.classList.remove('hidden');
+            } else {
+                resultsDiv.classList.add('hidden');
+            }
+        });
+
+        window.handleResultClick = (name) => {
+            const data = provinces.find(p => p.name === name);
+            selectProvince(data);
+            resultsDiv.classList.add('hidden');
+            searchInput.value = name;
+            
+            // Zoom to province if possible
+            geoJsonLayer.eachLayer(layer => {
+                const layerName = (layer.feature.properties.name || layer.feature.properties.NAME_1).replace('Changwat ', '');
+                if (layerName === name || name.includes(layerName)) {
+                    map.fitBounds(layer.getBounds());
+                    layer.setStyle({ weight: 4, color: '#fbbf24' });
+                    setTimeout(() => geoJsonLayer.resetStyle(layer), 3000);
+                }
+            });
+        };
+
+        function selectProvince(data) {
+            placeholderCard.classList.add('hidden');
+            statsCard.classList.remove('hidden');
+
+            document.getElementById('displayProvinceName').textContent = data.name;
+            document.getElementById('displayStudentCount').textContent = data.count.toLocaleString();
+            document.getElementById('displayArea').textContent = data.area.toLocaleString(undefined, {minimumFractionDigits: 2});
+            document.getElementById('displayDensity').textContent = data.density.toFixed(2);
+        }
+
+        // Close results on click outside
+        document.addEventListener('click', (e) => {
+            if (!searchInput.contains(e.target) && !resultsDiv.contains(e.target)) {
+                resultsDiv.classList.add('hidden');
+            }
+        });
+
+    </script>
+</body>
+</html>
