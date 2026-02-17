@@ -7,6 +7,8 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;600;700&display=swap');
         
@@ -50,12 +52,6 @@
             background: white;
         }
 
-        .highlight-row {
-            background-color: #eff6ff !important;
-            transition: background-color 0.3s ease;
-        }
-
-        /* 20-step sequential gradient for the legend */
         .gradient-bar {
             height: 16px;
             width: 100%;
@@ -68,75 +64,147 @@
             border-radius: 99px;
             border: 1px solid rgba(0,0,0,0.1);
         }
+
+        .view-transition {
+            transition: opacity 0.3s ease-in-out;
+        }
+        
+        .hidden-view {
+            display: none;
+            opacity: 0;
+        }
+
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f5f9;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 10px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+
+        .district-item-active {
+            border-color: #3b82f6 !important;
+            background-color: #eff6ff !important;
+            transform: scale(1.02);
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+        }
     </style>
 </head>
 <body class="pb-12">
 
-    <div class="max-w-7xl mx-auto px-4 pt-8">
-        <div class="mb-6 flex flex-col md:flex-row md:items-end justify-between gap-4">
-            <div>
-                <h1 class="text-3xl font-extrabold text-slate-900 tracking-tight">Thailand Student Geographic Analytics</h1>
-                <p class="text-slate-500 mt-1">แผนที่ความร้อน (Heatmap) แสดงความหนาแน่นและจำนวนนักเรียนแบ่งตาม 77 จังหวัด</p>
+    <!-- Main Map View -->
+    <div id="main-view" class="view-transition">
+        <div class="max-w-7xl mx-auto px-4 pt-8">
+            <div class="mb-6 flex flex-col md:flex-row md:items-end justify-between gap-4">
+                <div>
+                    <h1 class="text-3xl font-extrabold text-slate-900 tracking-tight">Thailand Student Geographic Analytics</h1>
+                    <p class="text-slate-500 mt-1">แผนที่ความร้อน (Heatmap) แสดงความหนาแน่นและจำนวนนักเรียนแบ่งตาม 77 จังหวัด</p>
+                </div>
+                <div class="flex gap-3">
+                    <div class="bg-white px-5 py-2 rounded-2xl shadow-sm border border-slate-200">
+                        <p class="text-[10px] uppercase font-bold text-slate-400 tracking-widest">Total Students (Country)</p>
+                        <p id="total-students-count" class="text-xl font-bold text-blue-600">...</p>
+                    </div>
+                </div>
             </div>
-            <div class="flex gap-3">
-                <div class="bg-white px-5 py-2 rounded-2xl shadow-sm border border-slate-200">
-                    <p class="text-[10px] uppercase font-bold text-slate-400 tracking-widest">Total Students (Country)</p>
-                    <p id="total-students-count" class="text-xl font-bold text-blue-600">...</p>
+
+            <div class="relative bg-white p-2 rounded-[2.5rem] shadow-2xl border border-slate-200 overflow-hidden">
+                <div class="absolute top-4 left-16 z-[1000] bg-white/80 backdrop-blur px-4 py-2 rounded-xl border border-slate-200 shadow-sm pointer-events-none">
+                    <p class="text-[10px] font-bold text-slate-500 uppercase tracking-tighter">Current View</p>
+                    <p id="active-layer-text" class="text-sm font-bold text-blue-700">Student Density</p>
+                </div>
+
+                <div id="map"></div>
+                
+                <div class="absolute bottom-10 right-10 z-[1000] map-legend p-5 rounded-3xl shadow-xl border border-slate-200 w-64">
+                    <p id="legend-title" class="text-xs font-bold text-slate-800 uppercase tracking-widest mb-3">Student Density</p>
+                    <div class="gradient-bar"></div>
+                    <div class="flex justify-between mt-2 text-[10px] font-black text-slate-600 uppercase tracking-widest">
+                        <span>Low</span>
+                        <span>High</span>
+                    </div>
                 </div>
             </div>
         </div>
 
-        <div class="relative bg-white p-2 rounded-[2.5rem] shadow-2xl border border-slate-200 overflow-hidden">
-            <!-- Current Layer Indicator -->
-            <div class="absolute top-4 left-16 z-[1000] bg-white/80 backdrop-blur px-4 py-2 rounded-xl border border-slate-200 shadow-sm pointer-events-none">
-                <p class="text-[10px] font-bold text-slate-500 uppercase tracking-tighter">Current View</p>
-                <p id="active-layer-text" class="text-sm font-bold text-blue-700">Student Density</p>
-            </div>
-
-            <div id="map"></div>
-            
-            <!-- Optimized Legend -->
-            <div class="absolute bottom-10 right-10 z-[1000] map-legend p-5 rounded-3xl shadow-xl border border-slate-200 w-64">
-                <p id="legend-title" class="text-xs font-bold text-slate-800 uppercase tracking-widest mb-3">Student Density</p>
-                <div class="gradient-bar"></div>
-                <div class="flex justify-between mt-2 text-[10px] font-black text-slate-600 uppercase tracking-widest">
-                    <span>Low</span>
-                    <span>High</span>
+        <div class="max-w-7xl mx-auto px-4 mt-12">
+            <div class="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
+                <div class="p-6 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <h2 class="text-xl font-bold text-slate-800">ตารางข้อมูลนักเรียนรายจังหวัด</h2>
+                    <div class="relative max-w-sm w-full">
+                        <input type="text" id="tableSearch" placeholder="Search province..." 
+                               class="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-blue-500 focus:outline-none transition-all">
+                        <svg class="w-5 h-5 absolute left-3 top-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                    </div>
+                </div>
+                
+                <div class="overflow-x-auto max-h-[600px] overflow-y-auto">
+                    <table class="w-full text-left border-collapse">
+                        <thead class="sticky-table-header shadow-sm border-b border-slate-100">
+                            <tr>
+                                <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase">Province</th>
+                                <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase text-right">Population</th>
+                                <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase text-right">Area</th>
+                                <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase text-right">Density</th>
+                            </tr>
+                        </thead>
+                        <tbody id="provinceTableBody" class="divide-y divide-slate-50">
+                        </tbody>
+                    </table>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Data List -->
-    <div class="max-w-7xl mx-auto px-4 mt-12">
-        <div class="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
-            <div class="p-6 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <h2 class="text-xl font-bold text-slate-800">ตารางข้อมูลนักเรียนรายจังหวัด</h2>
-                <div class="relative max-w-sm w-full">
-                    <input type="text" id="tableSearch" placeholder="Search province..." 
-                           class="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-blue-500 focus:outline-none transition-all">
-                    <svg class="w-5 h-5 absolute left-3 top-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+    <!-- District Detail View -->
+    <div id="district-view" class="view-transition hidden-view min-h-screen">
+        <div class="max-w-5xl mx-auto px-4 pt-12">
+            <button onclick="backToMainView()" class="mb-8 flex items-center gap-2 text-blue-600 font-bold hover:text-blue-800 transition-colors group">
+                <div class="p-2 bg-white rounded-xl shadow-sm border border-slate-200 group-hover:bg-blue-50">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
                 </div>
-            </div>
-            
-            <div class="overflow-x-auto max-h-[600px] overflow-y-auto">
-                <table class="w-full text-left border-collapse">
-                    <thead class="sticky-table-header shadow-sm border-b border-slate-100">
-                        <tr>
-                            <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase">Province</th>
-                            <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase text-right">Population</th>
-                            <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase text-right">Area</th>
-                            <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase text-right">Density</th>
-                        </tr>
-                    </thead>
-                    <tbody id="provinceTableBody" class="divide-y divide-slate-50">
-                    </tbody>
-                </table>
+                กลับไปยังแผนที่หลัก
+            </button>
+
+            <div class="bg-white rounded-[3rem] shadow-2xl border border-slate-200 overflow-hidden p-8 md:p-12">
+                <div class="text-center mb-10">
+                    <span class="inline-block px-4 py-1.5 bg-blue-50 text-blue-600 text-xs font-bold uppercase tracking-widest rounded-full mb-4">District Breakdown</span>
+                    <h2 id="district-view-title" class="text-4xl font-black text-slate-900 mb-2">จังหวัดกระบี่</h2>
+                    <p class="text-slate-500">ข้อมูลจำนวนนักเรียนรายอำเภอ</p>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-12 items-start">
+                    <div class="relative flex flex-col items-center">
+                        <div class="w-full max-w-[400px]">
+                            <canvas id="districtChart"></canvas>
+                        </div>
+                        <p class="mt-4 text-[10px] text-slate-400 font-bold uppercase tracking-tighter" id="chart-footer-text">* คลิกที่รายชื่ออำเภอเพื่อแสดงสัดส่วนเฉพาะในแผนภูมิ</p>
+                    </div>
+                    
+                    <div>
+                        <div class="relative mb-6">
+                            <input type="text" id="districtSearch" placeholder="ค้นหาอำเภอ..." 
+                                   class="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-blue-500 focus:outline-none transition-all text-sm">
+                            <svg class="w-5 h-5 absolute left-3 top-3 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                        </div>
+
+                        <div class="space-y-3 max-h-[500px] overflow-y-auto pr-2" id="district-list">
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
 
     <script>
+        // Province Data
         const csvData = `ProvinceName,พื้นที่ (ตร.กม.),StudentCount,Students/sq.km
 กระบี่,4708.51,107984,22.93379434
 กรุงเทพมหานคร,1568.74,999183,636.9334625
@@ -214,7 +282,4651 @@
 อุดรธานี,11730.3,272100,23.19633769
 อุตรดิตถ์,7838.59,71583,9.132126822
 อุทัยธานี,6730.25,55005,8.172801813
-อุบลราชธานี,15744.8,337325,21.42453381`;
+อุบลราชธานี,15744.8,337325,21.4245338134`;
+
+        // Mock District Data
+        const mockDistrictData = [
+    {
+        "province": "กระบี่",
+        "district": "คลองท่อม",
+        "count": 14756
+    },
+    {
+        "province": "กระบี่",
+        "district": "ปลายพระยา",
+        "count": 6175
+    },
+    {
+        "province": "กระบี่",
+        "district": "ลำทับ",
+        "count": 5388
+    },
+    {
+        "province": "กระบี่",
+        "district": "อ่าวลึก",
+        "count": 13390
+    },
+    {
+        "province": "กระบี่",
+        "district": "เกาะลันตา",
+        "count": 7379
+    },
+    {
+        "province": "กระบี่",
+        "district": "เขาพนม",
+        "count": 9945
+    },
+    {
+        "province": "กระบี่",
+        "district": "เมืองกระบี่",
+        "count": 27066
+    },
+    {
+        "province": "กระบี่",
+        "district": "เหนือคลอง",
+        "count": 17441
+    },
+    {
+        "province": "กรุงเทพมหานคร",
+        "district": "เขตคลองสาน",
+        "count": 4625
+    },
+    {
+        "province": "กรุงเทพมหานคร",
+        "district": "เขตคลองสามวา",
+        "count": 18300
+    },
+    {
+        "province": "กรุงเทพมหานคร",
+        "district": "เขตคลองเตย",
+        "count": 16872
+    },
+    {
+        "province": "กรุงเทพมหานคร",
+        "district": "เขตคันนายาว",
+        "count": 4564
+    },
+    {
+        "province": "กรุงเทพมหานคร",
+        "district": "เขตจตุจักร",
+        "count": 19242
+    },
+    {
+        "province": "กรุงเทพมหานคร",
+        "district": "เขตจอมทอง",
+        "count": 13846
+    },
+    {
+        "province": "กรุงเทพมหานคร",
+        "district": "เขตดอนเมือง",
+        "count": 14994
+    },
+    {
+        "province": "กรุงเทพมหานคร",
+        "district": "เขตดินแดง",
+        "count": 13615
+    },
+    {
+        "province": "กรุงเทพมหานคร",
+        "district": "เขตดุสิต",
+        "count": 33018
+    },
+    {
+        "province": "กรุงเทพมหานคร",
+        "district": "เขตตลิ่งชัน",
+        "count": 20692
+    },
+    {
+        "province": "กรุงเทพมหานคร",
+        "district": "เขตทวีวัฒนา",
+        "count": 9996
+    },
+    {
+        "province": "กรุงเทพมหานคร",
+        "district": "เขตทุ่งครุ",
+        "count": 11203
+    },
+    {
+        "province": "กรุงเทพมหานคร",
+        "district": "เขตธนบุรี",
+        "count": 15830
+    },
+    {
+        "province": "กรุงเทพมหานคร",
+        "district": "เขตบางกอกน้อย",
+        "count": 18910
+    },
+    {
+        "province": "กรุงเทพมหานคร",
+        "district": "เขตบางกอกใหญ่",
+        "count": 16627
+    },
+    {
+        "province": "กรุงเทพมหานคร",
+        "district": "เขตบางกะปิ",
+        "count": 51065
+    },
+    {
+        "province": "กรุงเทพมหานคร",
+        "district": "เขตบางขุนเทียน",
+        "count": 55967
+    },
+    {
+        "province": "กรุงเทพมหานคร",
+        "district": "เขตบางคอแหลม",
+        "count": 3736
+    },
+    {
+        "province": "กรุงเทพมหานคร",
+        "district": "เขตบางซื่อ",
+        "count": 10238
+    },
+    {
+        "province": "กรุงเทพมหานคร",
+        "district": "เขตบางนา",
+        "count": 21910
+    },
+    {
+        "province": "กรุงเทพมหานคร",
+        "district": "เขตบางบอน",
+        "count": 19501
+    },
+    {
+        "province": "กรุงเทพมหานคร",
+        "district": "เขตบางพลัด",
+        "count": 8194
+    },
+    {
+        "province": "กรุงเทพมหานคร",
+        "district": "เขตบางรัก",
+        "count": 21309
+    },
+    {
+        "province": "กรุงเทพมหานคร",
+        "district": "เขตบางเขน",
+        "count": 51671
+    },
+    {
+        "province": "กรุงเทพมหานคร",
+        "district": "เขตบางแค",
+        "count": 23900
+    },
+    {
+        "province": "กรุงเทพมหานคร",
+        "district": "เขตบึงกุ่ม",
+        "count": 15006
+    },
+    {
+        "province": "กรุงเทพมหานคร",
+        "district": "เขตปทุมวัน",
+        "count": 10877
+    },
+    {
+        "province": "กรุงเทพมหานคร",
+        "district": "เขตประเวศ",
+        "count": 14913
+    },
+    {
+        "province": "กรุงเทพมหานคร",
+        "district": "เขตป้อมปราบศัตรูพ่าย",
+        "count": 7445
+    },
+    {
+        "province": "กรุงเทพมหานคร",
+        "district": "เขตพญาไท",
+        "count": 7774
+    },
+    {
+        "province": "กรุงเทพมหานคร",
+        "district": "เขตพระนคร",
+        "count": 22758
+    },
+    {
+        "province": "กรุงเทพมหานคร",
+        "district": "เขตพระโขนง",
+        "count": 42511
+    },
+    {
+        "province": "กรุงเทพมหานคร",
+        "district": "เขตภาษีเจริญ",
+        "count": 29886
+    },
+    {
+        "province": "กรุงเทพมหานคร",
+        "district": "เขตมีนบุรี",
+        "count": 43346
+    },
+    {
+        "province": "กรุงเทพมหานคร",
+        "district": "เขตยานนาวา",
+        "count": 19372
+    },
+    {
+        "province": "กรุงเทพมหานคร",
+        "district": "เขตราชเทวี",
+        "count": 17211
+    },
+    {
+        "province": "กรุงเทพมหานคร",
+        "district": "เขตราษฎร์บูรณะ",
+        "count": 21263
+    },
+    {
+        "province": "กรุงเทพมหานคร",
+        "district": "เขตลาดกระบัง",
+        "count": 40979
+    },
+    {
+        "province": "กรุงเทพมหานคร",
+        "district": "เขตลาดพร้าว",
+        "count": 10158
+    },
+    {
+        "province": "กรุงเทพมหานคร",
+        "district": "เขตวังทองหลาง",
+        "count": 19406
+    },
+    {
+        "province": "กรุงเทพมหานคร",
+        "district": "เขตวัฒนา",
+        "count": 19174
+    },
+    {
+        "province": "กรุงเทพมหานคร",
+        "district": "เขตสวนหลวง",
+        "count": 11607
+    },
+    {
+        "province": "กรุงเทพมหานคร",
+        "district": "เขตสะพานสูง",
+        "count": 13574
+    },
+    {
+        "province": "กรุงเทพมหานคร",
+        "district": "เขตสัมพันธวงศ์",
+        "count": 3106
+    },
+    {
+        "province": "กรุงเทพมหานคร",
+        "district": "เขตสาทร",
+        "count": 15186
+    },
+    {
+        "province": "กรุงเทพมหานคร",
+        "district": "เขตสายไหม",
+        "count": 20980
+    },
+    {
+        "province": "กรุงเทพมหานคร",
+        "district": "เขตหนองจอก",
+        "count": 34334
+    },
+    {
+        "province": "กรุงเทพมหานคร",
+        "district": "เขตหนองแขม",
+        "count": 31302
+    },
+    {
+        "province": "กรุงเทพมหานคร",
+        "district": "เขตหลักสี่",
+        "count": 7063
+    },
+    {
+        "province": "กรุงเทพมหานคร",
+        "district": "เขตห้วยขวาง",
+        "count": 20127
+    },
+    {
+        "province": "กาญจนบุรี",
+        "district": "ด่านมะขามเตี้ย",
+        "count": 4906
+    },
+    {
+        "province": "กาญจนบุรี",
+        "district": "ทองผาภูมิ",
+        "count": 14499
+    },
+    {
+        "province": "กาญจนบุรี",
+        "district": "ท่ามะกา",
+        "count": 19321
+    },
+    {
+        "province": "กาญจนบุรี",
+        "district": "ท่าม่วง",
+        "count": 24430
+    },
+    {
+        "province": "กาญจนบุรี",
+        "district": "บ่อพลอย",
+        "count": 8443
+    },
+    {
+        "province": "กาญจนบุรี",
+        "district": "พนมทวน",
+        "count": 7610
+    },
+    {
+        "province": "กาญจนบุรี",
+        "district": "ศรีสวัสดิ์",
+        "count": 4399
+    },
+    {
+        "province": "กาญจนบุรี",
+        "district": "สังขละบุรี",
+        "count": 11879
+    },
+    {
+        "province": "กาญจนบุรี",
+        "district": "หนองปรือ",
+        "count": 6300
+    },
+    {
+        "province": "กาญจนบุรี",
+        "district": "ห้วยกระเจา",
+        "count": 3653
+    },
+    {
+        "province": "กาญจนบุรี",
+        "district": "เมืองกาญจนบุรี",
+        "count": 33632
+    },
+    {
+        "province": "กาญจนบุรี",
+        "district": "เลาขวัญ",
+        "count": 8494
+    },
+    {
+        "province": "กาญจนบุรี",
+        "district": "ไทรโยค",
+        "count": 10647
+    },
+    {
+        "province": "กาฬสินธุ์",
+        "district": "กมลาไสย",
+        "count": 10774
+    },
+    {
+        "province": "กาฬสินธุ์",
+        "district": "กุฉินารายณ์",
+        "count": 15660
+    },
+    {
+        "province": "กาฬสินธุ์",
+        "district": "คำม่วง",
+        "count": 10190
+    },
+    {
+        "province": "กาฬสินธุ์",
+        "district": "ฆ้องชัย",
+        "count": 3292
+    },
+    {
+        "province": "กาฬสินธุ์",
+        "district": "ดอนจาน",
+        "count": 4006
+    },
+    {
+        "province": "กาฬสินธุ์",
+        "district": "ท่าคันโท",
+        "count": 6568
+    },
+    {
+        "province": "กาฬสินธุ์",
+        "district": "นาคู",
+        "count": 4540
+    },
+    {
+        "province": "กาฬสินธุ์",
+        "district": "นามน",
+        "count": 5496
+    },
+    {
+        "province": "กาฬสินธุ์",
+        "district": "ยางตลาด",
+        "count": 16316
+    },
+    {
+        "province": "กาฬสินธุ์",
+        "district": "ร่องคำ",
+        "count": 4572
+    },
+    {
+        "province": "กาฬสินธุ์",
+        "district": "สมเด็จ",
+        "count": 14079
+    },
+    {
+        "province": "กาฬสินธุ์",
+        "district": "สหัสขันธ์",
+        "count": 7512
+    },
+    {
+        "province": "กาฬสินธุ์",
+        "district": "สามชัย",
+        "count": 4657
+    },
+    {
+        "province": "กาฬสินธุ์",
+        "district": "หนองกุงศรี",
+        "count": 10776
+    },
+    {
+        "province": "กาฬสินธุ์",
+        "district": "ห้วยผึ้ง",
+        "count": 5843
+    },
+    {
+        "province": "กาฬสินธุ์",
+        "district": "ห้วยเม็ก",
+        "count": 8670
+    },
+    {
+        "province": "กาฬสินธุ์",
+        "district": "เขาวง",
+        "count": 7110
+    },
+    {
+        "province": "กาฬสินธุ์",
+        "district": "เมืองกาฬสินธุ์",
+        "count": 32297
+    },
+    {
+        "province": "กำแพงเพชร",
+        "district": "ขาณุวรลักษบุรี",
+        "count": 19441
+    },
+    {
+        "province": "กำแพงเพชร",
+        "district": "คลองขลุง",
+        "count": 9671
+    },
+    {
+        "province": "กำแพงเพชร",
+        "district": "คลองลาน",
+        "count": 9408
+    },
+    {
+        "province": "กำแพงเพชร",
+        "district": "ทรายทองวัฒนา",
+        "count": 3354
+    },
+    {
+        "province": "กำแพงเพชร",
+        "district": "บึงสามัคคี",
+        "count": 3051
+    },
+    {
+        "province": "กำแพงเพชร",
+        "district": "ปางศิลาทอง",
+        "count": 4147
+    },
+    {
+        "province": "กำแพงเพชร",
+        "district": "พรานกระต่าย",
+        "count": 10812
+    },
+    {
+        "province": "กำแพงเพชร",
+        "district": "ลานกระบือ",
+        "count": 6911
+    },
+    {
+        "province": "กำแพงเพชร",
+        "district": "เมืองกำแพงเพชร",
+        "count": 40360
+    },
+    {
+        "province": "กำแพงเพชร",
+        "district": "โกสัมพีนคร",
+        "count": 2980
+    },
+    {
+        "province": "กำแพงเพชร",
+        "district": "ไทรงาม",
+        "count": 6511
+    },
+    {
+        "province": "ขอนแก่น",
+        "district": "กระนวน",
+        "count": 16196
+    },
+    {
+        "province": "ขอนแก่น",
+        "district": "ชนบท",
+        "count": 9329
+    },
+    {
+        "province": "ขอนแก่น",
+        "district": "ชุมแพ",
+        "count": 27257
+    },
+    {
+        "province": "ขอนแก่น",
+        "district": "ซำสูง",
+        "count": 3127
+    },
+    {
+        "province": "ขอนแก่น",
+        "district": "น้ำพอง",
+        "count": 17909
+    },
+    {
+        "province": "ขอนแก่น",
+        "district": "บ้านฝาง",
+        "count": 6516
+    },
+    {
+        "province": "ขอนแก่น",
+        "district": "บ้านแฮด",
+        "count": 5678
+    },
+    {
+        "province": "ขอนแก่น",
+        "district": "บ้านไผ่",
+        "count": 17104
+    },
+    {
+        "province": "ขอนแก่น",
+        "district": "พระยืน",
+        "count": 5459
+    },
+    {
+        "province": "ขอนแก่น",
+        "district": "พล",
+        "count": 19728
+    },
+    {
+        "province": "ขอนแก่น",
+        "district": "ภูผาม่าน",
+        "count": 3866
+    },
+    {
+        "province": "ขอนแก่น",
+        "district": "ภูเวียง",
+        "count": 13562
+    },
+    {
+        "province": "ขอนแก่น",
+        "district": "มัญจาคีรี",
+        "count": 12561
+    },
+    {
+        "province": "ขอนแก่น",
+        "district": "สีชมพู",
+        "count": 11618
+    },
+    {
+        "province": "ขอนแก่น",
+        "district": "หนองนาคำ",
+        "count": 3500
+    },
+    {
+        "province": "ขอนแก่น",
+        "district": "หนองสองห้อง",
+        "count": 15653
+    },
+    {
+        "province": "ขอนแก่น",
+        "district": "หนองเรือ",
+        "count": 15995
+    },
+    {
+        "province": "ขอนแก่น",
+        "district": "อุบลรัตน์",
+        "count": 6845
+    },
+    {
+        "province": "ขอนแก่น",
+        "district": "เขาสวนกวาง",
+        "count": 5532
+    },
+    {
+        "province": "ขอนแก่น",
+        "district": "เปือยน้อย",
+        "count": 2862
+    },
+    {
+        "province": "ขอนแก่น",
+        "district": "เมืองขอนแก่น",
+        "count": 85988
+    },
+    {
+        "province": "ขอนแก่น",
+        "district": "เวียงเก่า",
+        "count": 2869
+    },
+    {
+        "province": "ขอนแก่น",
+        "district": "แวงน้อย",
+        "count": 6143
+    },
+    {
+        "province": "ขอนแก่น",
+        "district": "แวงใหญ่",
+        "count": 4881
+    },
+    {
+        "province": "ขอนแก่น",
+        "district": "โคกโพธิ์ไชย",
+        "count": 4370
+    },
+    {
+        "province": "ขอนแก่น",
+        "district": "โนนศิลา",
+        "count": 3950
+    },
+    {
+        "province": "จันทบุรี",
+        "district": "ขลุง",
+        "count": 6115
+    },
+    {
+        "province": "จันทบุรี",
+        "district": "ท่าใหม่",
+        "count": 9752
+    },
+    {
+        "province": "จันทบุรี",
+        "district": "นายายอาม",
+        "count": 5541
+    },
+    {
+        "province": "จันทบุรี",
+        "district": "มะขาม",
+        "count": 3091
+    },
+    {
+        "province": "จันทบุรี",
+        "district": "สอยดาว",
+        "count": 11278
+    },
+    {
+        "province": "จันทบุรี",
+        "district": "เขาคิชฌกูฏ",
+        "count": 4866
+    },
+    {
+        "province": "จันทบุรี",
+        "district": "เมืองจันทบุรี",
+        "count": 34286
+    },
+    {
+        "province": "จันทบุรี",
+        "district": "แก่งหางแมว",
+        "count": 6393
+    },
+    {
+        "province": "จันทบุรี",
+        "district": "แหลมสิงห์",
+        "count": 2921
+    },
+    {
+        "province": "จันทบุรี",
+        "district": "โป่งน้ำร้อน",
+        "count": 7716
+    },
+    {
+        "province": "ฉะเชิงเทรา",
+        "district": "คลองเขื่อน",
+        "count": 1044
+    },
+    {
+        "province": "ฉะเชิงเทรา",
+        "district": "ท่าตะเกียบ",
+        "count": 7384
+    },
+    {
+        "province": "ฉะเชิงเทรา",
+        "district": "บางคล้า",
+        "count": 5679
+    },
+    {
+        "province": "ฉะเชิงเทรา",
+        "district": "บางน้ำเปรี้ยว",
+        "count": 13542
+    },
+    {
+        "province": "ฉะเชิงเทรา",
+        "district": "บางปะกง",
+        "count": 15762
+    },
+    {
+        "province": "ฉะเชิงเทรา",
+        "district": "บ้านโพธิ์",
+        "count": 6744
+    },
+    {
+        "province": "ฉะเชิงเทรา",
+        "district": "พนมสารคาม",
+        "count": 16875
+    },
+    {
+        "province": "ฉะเชิงเทรา",
+        "district": "ราชสาส์น",
+        "count": 1137
+    },
+    {
+        "province": "ฉะเชิงเทรา",
+        "district": "สนามชัยเขต",
+        "count": 11596
+    },
+    {
+        "province": "ฉะเชิงเทรา",
+        "district": "เมืองฉะเชิงเทรา",
+        "count": 42412
+    },
+    {
+        "province": "ฉะเชิงเทรา",
+        "district": "แปลงยาว",
+        "count": 6842
+    },
+    {
+        "province": "ชลบุรี",
+        "district": "บางละมุง",
+        "count": 72322
+    },
+    {
+        "province": "ชลบุรี",
+        "district": "บ่อทอง",
+        "count": 9135
+    },
+    {
+        "province": "ชลบุรี",
+        "district": "บ้านบึง",
+        "count": 27729
+    },
+    {
+        "province": "ชลบุรี",
+        "district": "พนัสนิคม",
+        "count": 22520
+    },
+    {
+        "province": "ชลบุรี",
+        "district": "พานทอง",
+        "count": 28874
+    },
+    {
+        "province": "ชลบุรี",
+        "district": "ศรีราชา",
+        "count": 67823
+    },
+    {
+        "province": "ชลบุรี",
+        "district": "สัตหีบ",
+        "count": 32733
+    },
+    {
+        "province": "ชลบุรี",
+        "district": "หนองใหญ่",
+        "count": 3875
+    },
+    {
+        "province": "ชลบุรี",
+        "district": "เกาะจันทร์",
+        "count": 7181
+    },
+    {
+        "province": "ชลบุรี",
+        "district": "เกาะสีชัง",
+        "count": 575
+    },
+    {
+        "province": "ชลบุรี",
+        "district": "เมืองชลบุรี",
+        "count": 74461
+    },
+    {
+        "province": "ชัยนาท",
+        "district": "มโนรมย์",
+        "count": 4230
+    },
+    {
+        "province": "ชัยนาท",
+        "district": "วัดสิงห์",
+        "count": 3736
+    },
+    {
+        "province": "ชัยนาท",
+        "district": "สรรคบุรี",
+        "count": 7449
+    },
+    {
+        "province": "ชัยนาท",
+        "district": "สรรพยา",
+        "count": 3920
+    },
+    {
+        "province": "ชัยนาท",
+        "district": "หนองมะโมง",
+        "count": 2574
+    },
+    {
+        "province": "ชัยนาท",
+        "district": "หันคา",
+        "count": 7987
+    },
+    {
+        "province": "ชัยนาท",
+        "district": "เนินขาม",
+        "count": 2530
+    },
+    {
+        "province": "ชัยนาท",
+        "district": "เมืองชัยนาท",
+        "count": 14679
+    },
+    {
+        "province": "ชัยภูมิ",
+        "district": "คอนสวรรค์",
+        "count": 7847
+    },
+    {
+        "province": "ชัยภูมิ",
+        "district": "คอนสาร",
+        "count": 9946
+    },
+    {
+        "province": "ชัยภูมิ",
+        "district": "จัตุรัส",
+        "count": 10617
+    },
+    {
+        "province": "ชัยภูมิ",
+        "district": "ซับใหญ่",
+        "count": 3873
+    },
+    {
+        "province": "ชัยภูมิ",
+        "district": "บำเหน็จณรงค์",
+        "count": 8345
+    },
+    {
+        "province": "ชัยภูมิ",
+        "district": "บ้านเขว้า",
+        "count": 7071
+    },
+    {
+        "province": "ชัยภูมิ",
+        "district": "บ้านแท่น",
+        "count": 7199
+    },
+    {
+        "province": "ชัยภูมิ",
+        "district": "ภักดีชุมพล",
+        "count": 5638
+    },
+    {
+        "province": "ชัยภูมิ",
+        "district": "ภูเขียว",
+        "count": 19142
+    },
+    {
+        "province": "ชัยภูมิ",
+        "district": "หนองบัวระเหว",
+        "count": 7851
+    },
+    {
+        "province": "ชัยภูมิ",
+        "district": "หนองบัวแดง",
+        "count": 18314
+    },
+    {
+        "province": "ชัยภูมิ",
+        "district": "เกษตรสมบูรณ์",
+        "count": 17506
+    },
+    {
+        "province": "ชัยภูมิ",
+        "district": "เทพสถิต",
+        "count": 12329
+    },
+    {
+        "province": "ชัยภูมิ",
+        "district": "เนินสง่า",
+        "count": 3904
+    },
+    {
+        "province": "ชัยภูมิ",
+        "district": "เมืองชัยภูมิ",
+        "count": 41541
+    },
+    {
+        "province": "ชัยภูมิ",
+        "district": "แก้งคร้อ",
+        "count": 18612
+    },
+    {
+        "province": "ชุมพร",
+        "district": "ทุ่งตะโก",
+        "count": 4627
+    },
+    {
+        "province": "ชุมพร",
+        "district": "ท่าแซะ",
+        "count": 14069
+    },
+    {
+        "province": "ชุมพร",
+        "district": "ปะทิว",
+        "count": 8471
+    },
+    {
+        "province": "ชุมพร",
+        "district": "พะโต๊ะ",
+        "count": 3551
+    },
+    {
+        "province": "ชุมพร",
+        "district": "ละแม",
+        "count": 5428
+    },
+    {
+        "province": "ชุมพร",
+        "district": "สวี",
+        "count": 12000
+    },
+    {
+        "province": "ชุมพร",
+        "district": "หลังสวน",
+        "count": 15879
+    },
+    {
+        "province": "ชุมพร",
+        "district": "เมืองชุมพร",
+        "count": 32049
+    },
+    {
+        "province": "ตรัง",
+        "district": "กันตัง",
+        "count": 15365
+    },
+    {
+        "province": "ตรัง",
+        "district": "นาโยง",
+        "count": 5131
+    },
+    {
+        "province": "ตรัง",
+        "district": "ปะเหลียน",
+        "count": 10608
+    },
+    {
+        "province": "ตรัง",
+        "district": "ย่านตาขาว",
+        "count": 10413
+    },
+    {
+        "province": "ตรัง",
+        "district": "รัษฎา",
+        "count": 5484
+    },
+    {
+        "province": "ตรัง",
+        "district": "วังวิเศษ",
+        "count": 7335
+    },
+    {
+        "province": "ตรัง",
+        "district": "สิเกา",
+        "count": 6275
+    },
+    {
+        "province": "ตรัง",
+        "district": "หาดสำราญ",
+        "count": 2314
+    },
+    {
+        "province": "ตรัง",
+        "district": "ห้วยยอด",
+        "count": 18303
+    },
+    {
+        "province": "ตรัง",
+        "district": "เมืองตรัง",
+        "count": 39401
+    },
+    {
+        "province": "ตราด",
+        "district": "คลองใหญ่",
+        "count": 4614
+    },
+    {
+        "province": "ตราด",
+        "district": "บ่อไร่",
+        "count": 6032
+    },
+    {
+        "province": "ตราด",
+        "district": "เกาะกูด",
+        "count": 653
+    },
+    {
+        "province": "ตราด",
+        "district": "เกาะช้าง",
+        "count": 1911
+    },
+    {
+        "province": "ตราด",
+        "district": "เขาสมิง",
+        "count": 6274
+    },
+    {
+        "province": "ตราด",
+        "district": "เมืองตราด",
+        "count": 20094
+    },
+    {
+        "province": "ตราด",
+        "district": "แหลมงอบ",
+        "count": 2067
+    },
+    {
+        "province": "ตาก",
+        "district": "ท่าสองยาง",
+        "count": 20586
+    },
+    {
+        "province": "ตาก",
+        "district": "บ้านตาก",
+        "count": 7171
+    },
+    {
+        "province": "ตาก",
+        "district": "พบพระ",
+        "count": 17367
+    },
+    {
+        "province": "ตาก",
+        "district": "วังเจ้า",
+        "count": 6101
+    },
+    {
+        "province": "ตาก",
+        "district": "สามเงา",
+        "count": 4476
+    },
+    {
+        "province": "ตาก",
+        "district": "อุ้มผาง",
+        "count": 10764
+    },
+    {
+        "province": "ตาก",
+        "district": "เมืองตาก",
+        "count": 21794
+    },
+    {
+        "province": "ตาก",
+        "district": "แม่ระมาด",
+        "count": 11706
+    },
+    {
+        "province": "ตาก",
+        "district": "แม่สอด",
+        "count": 32334
+    },
+    {
+        "province": "นครนายก",
+        "district": "บ้านนา",
+        "count": 11116
+    },
+    {
+        "province": "นครนายก",
+        "district": "ปากพลี",
+        "count": 2121
+    },
+    {
+        "province": "นครนายก",
+        "district": "องครักษ์",
+        "count": 11457
+    },
+    {
+        "province": "นครนายก",
+        "district": "เมืองนครนายก",
+        "count": 20951
+    },
+    {
+        "province": "นครปฐม",
+        "district": "กำแพงแสน",
+        "count": 19259
+    },
+    {
+        "province": "นครปฐม",
+        "district": "ดอนตูม",
+        "count": 8699
+    },
+    {
+        "province": "นครปฐม",
+        "district": "นครชัยศรี",
+        "count": 14760
+    },
+    {
+        "province": "นครปฐม",
+        "district": "บางเลน",
+        "count": 12330
+    },
+    {
+        "province": "นครปฐม",
+        "district": "พุทธมณฑล",
+        "count": 12249
+    },
+    {
+        "province": "นครปฐม",
+        "district": "สามพราน",
+        "count": 41217
+    },
+    {
+        "province": "นครปฐม",
+        "district": "เมืองนครปฐม",
+        "count": 53287
+    },
+    {
+        "province": "นครพนม",
+        "district": "ท่าอุเทน",
+        "count": 10113
+    },
+    {
+        "province": "นครพนม",
+        "district": "ธาตุพนม",
+        "count": 13914
+    },
+    {
+        "province": "นครพนม",
+        "district": "นาทม",
+        "count": 3838
+    },
+    {
+        "province": "นครพนม",
+        "district": "นาหว้า",
+        "count": 8397
+    },
+    {
+        "province": "นครพนม",
+        "district": "นาแก",
+        "count": 15021
+    },
+    {
+        "province": "นครพนม",
+        "district": "บ้านแพง",
+        "count": 8020
+    },
+    {
+        "province": "นครพนม",
+        "district": "ปลาปาก",
+        "count": 9701
+    },
+    {
+        "province": "นครพนม",
+        "district": "วังยาง",
+        "count": 2073
+    },
+    {
+        "province": "นครพนม",
+        "district": "ศรีสงคราม",
+        "count": 13479
+    },
+    {
+        "province": "นครพนม",
+        "district": "เมืองนครพนม",
+        "count": 28696
+    },
+    {
+        "province": "นครพนม",
+        "district": "เรณูนคร",
+        "count": 7408
+    },
+    {
+        "province": "นครพนม",
+        "district": "โพนสวรรค์",
+        "count": 9881
+    },
+    {
+        "province": "นครราชสีมา",
+        "district": "ขามทะเลสอ",
+        "count": 4245
+    },
+    {
+        "province": "นครราชสีมา",
+        "district": "ขามสะแกแสง",
+        "count": 6970
+    },
+    {
+        "province": "นครราชสีมา",
+        "district": "คง",
+        "count": 11655
+    },
+    {
+        "province": "นครราชสีมา",
+        "district": "ครบุรี",
+        "count": 14988
+    },
+    {
+        "province": "นครราชสีมา",
+        "district": "จักราช",
+        "count": 10925
+    },
+    {
+        "province": "นครราชสีมา",
+        "district": "ชุมพวง",
+        "count": 14626
+    },
+    {
+        "province": "นครราชสีมา",
+        "district": "ด่านขุนทด",
+        "count": 22618
+    },
+    {
+        "province": "นครราชสีมา",
+        "district": "บัวลาย",
+        "count": 2410
+    },
+    {
+        "province": "นครราชสีมา",
+        "district": "บัวใหญ่",
+        "count": 12748
+    },
+    {
+        "province": "นครราชสีมา",
+        "district": "บ้านเหลื่อม",
+        "count": 3342
+    },
+    {
+        "province": "นครราชสีมา",
+        "district": "ประทาย",
+        "count": 9784
+    },
+    {
+        "province": "นครราชสีมา",
+        "district": "ปักธงชัย",
+        "count": 18423
+    },
+    {
+        "province": "นครราชสีมา",
+        "district": "ปากช่อง",
+        "count": 37285
+    },
+    {
+        "province": "นครราชสีมา",
+        "district": "พระทองคำ",
+        "count": 5245
+    },
+    {
+        "province": "นครราชสีมา",
+        "district": "พิมาย",
+        "count": 21742
+    },
+    {
+        "province": "นครราชสีมา",
+        "district": "ลำทะเมนชัย",
+        "count": 5282
+    },
+    {
+        "province": "นครราชสีมา",
+        "district": "วังน้ำเขียว",
+        "count": 6643
+    },
+    {
+        "province": "นครราชสีมา",
+        "district": "สีคิ้ว",
+        "count": 18601
+    },
+    {
+        "province": "นครราชสีมา",
+        "district": "สีดา",
+        "count": 3275
+    },
+    {
+        "province": "นครราชสีมา",
+        "district": "สูงเนิน",
+        "count": 9773
+    },
+    {
+        "province": "นครราชสีมา",
+        "district": "หนองบุญมาก",
+        "count": 8982
+    },
+    {
+        "province": "นครราชสีมา",
+        "district": "ห้วยแถลง",
+        "count": 12539
+    },
+    {
+        "province": "นครราชสีมา",
+        "district": "เฉลิมพระเกียรติ",
+        "count": 3961
+    },
+    {
+        "province": "นครราชสีมา",
+        "district": "เทพารักษ์",
+        "count": 2717
+    },
+    {
+        "province": "นครราชสีมา",
+        "district": "เมืองนครราชสีมา",
+        "count": 102140
+    },
+    {
+        "province": "นครราชสีมา",
+        "district": "เมืองยาง",
+        "count": 2987
+    },
+    {
+        "province": "นครราชสีมา",
+        "district": "เสิงสาง",
+        "count": 12295
+    },
+    {
+        "province": "นครราชสีมา",
+        "district": "แก้งสนามนาง",
+        "count": 3719
+    },
+    {
+        "province": "นครราชสีมา",
+        "district": "โชคชัย",
+        "count": 15556
+    },
+    {
+        "province": "นครราชสีมา",
+        "district": "โนนสูง",
+        "count": 16258
+    },
+    {
+        "province": "นครราชสีมา",
+        "district": "โนนแดง",
+        "count": 4501
+    },
+    {
+        "province": "นครราชสีมา",
+        "district": "โนนไทย",
+        "count": 7981
+    },
+    {
+        "province": "นครศรีธรรมราช",
+        "district": "ขนอม",
+        "count": 5401
+    },
+    {
+        "province": "นครศรีธรรมราช",
+        "district": "จุฬาภรณ์",
+        "count": 3775
+    },
+    {
+        "province": "นครศรีธรรมราช",
+        "district": "ฉวาง",
+        "count": 11411
+    },
+    {
+        "province": "นครศรีธรรมราช",
+        "district": "ชะอวด",
+        "count": 14320
+    },
+    {
+        "province": "นครศรีธรรมราช",
+        "district": "ช้างกลาง",
+        "count": 5487
+    },
+    {
+        "province": "นครศรีธรรมราช",
+        "district": "ถ้ำพรรณรา",
+        "count": 2692
+    },
+    {
+        "province": "นครศรีธรรมราช",
+        "district": "ทุ่งสง",
+        "count": 35675
+    },
+    {
+        "province": "นครศรีธรรมราช",
+        "district": "ทุ่งใหญ่",
+        "count": 13760
+    },
+    {
+        "province": "นครศรีธรรมราช",
+        "district": "ท่าศาลา",
+        "count": 19003
+    },
+    {
+        "province": "นครศรีธรรมราช",
+        "district": "นบพิตำ",
+        "count": 3931
+    },
+    {
+        "province": "นครศรีธรรมราช",
+        "district": "นาบอน",
+        "count": 4110
+    },
+    {
+        "province": "นครศรีธรรมราช",
+        "district": "บางขัน",
+        "count": 7676
+    },
+    {
+        "province": "นครศรีธรรมราช",
+        "district": "ปากพนัง",
+        "count": 16687
+    },
+    {
+        "province": "นครศรีธรรมราช",
+        "district": "พรหมคีรี",
+        "count": 5867
+    },
+    {
+        "province": "นครศรีธรรมราช",
+        "district": "พระพรหม",
+        "count": 6470
+    },
+    {
+        "province": "นครศรีธรรมราช",
+        "district": "พิปูน",
+        "count": 4239
+    },
+    {
+        "province": "นครศรีธรรมราช",
+        "district": "ร่อนพิบูลย์",
+        "count": 13763
+    },
+    {
+        "province": "นครศรีธรรมราช",
+        "district": "ลานสกา",
+        "count": 4879
+    },
+    {
+        "province": "นครศรีธรรมราช",
+        "district": "สิชล",
+        "count": 15732
+    },
+    {
+        "province": "นครศรีธรรมราช",
+        "district": "หัวไทร",
+        "count": 10717
+    },
+    {
+        "province": "นครศรีธรรมราช",
+        "district": "เฉลิมพระเกียรติ",
+        "count": 4057
+    },
+    {
+        "province": "นครศรีธรรมราช",
+        "district": "เชียรใหญ่",
+        "count": 5887
+    },
+    {
+        "province": "นครศรีธรรมราช",
+        "district": "เมืองนครศรีธรรมราช",
+        "count": 66100
+    },
+    {
+        "province": "นครสวรรค์",
+        "district": "ชุมตาบง",
+        "count": 3441
+    },
+    {
+        "province": "นครสวรรค์",
+        "district": "ชุมแสง",
+        "count": 8384
+    },
+    {
+        "province": "นครสวรรค์",
+        "district": "ตากฟ้า",
+        "count": 5520
+    },
+    {
+        "province": "นครสวรรค์",
+        "district": "ตาคลี",
+        "count": 15907
+    },
+    {
+        "province": "นครสวรรค์",
+        "district": "ท่าตะโก",
+        "count": 8615
+    },
+    {
+        "province": "นครสวรรค์",
+        "district": "บรรพตพิสัย",
+        "count": 11044
+    },
+    {
+        "province": "นครสวรรค์",
+        "district": "พยุหะคีรี",
+        "count": 7456
+    },
+    {
+        "province": "นครสวรรค์",
+        "district": "ลาดยาว",
+        "count": 11714
+    },
+    {
+        "province": "นครสวรรค์",
+        "district": "หนองบัว",
+        "count": 9163
+    },
+    {
+        "province": "นครสวรรค์",
+        "district": "เก้าเลี้ยว",
+        "count": 3965
+    },
+    {
+        "province": "นครสวรรค์",
+        "district": "เมืองนครสวรรค์",
+        "count": 49239
+    },
+    {
+        "province": "นครสวรรค์",
+        "district": "แม่วงก์",
+        "count": 7772
+    },
+    {
+        "province": "นครสวรรค์",
+        "district": "แม่เปิน",
+        "count": 2658
+    },
+    {
+        "province": "นครสวรรค์",
+        "district": "โกรกพระ",
+        "count": 3794
+    },
+    {
+        "province": "นครสวรรค์",
+        "district": "ไพศาลี",
+        "count": 9787
+    },
+    {
+        "province": "นนทบุรี",
+        "district": "บางกรวย",
+        "count": 12983
+    },
+    {
+        "province": "นนทบุรี",
+        "district": "บางบัวทอง",
+        "count": 32304
+    },
+    {
+        "province": "นนทบุรี",
+        "district": "บางใหญ่",
+        "count": 10267
+    },
+    {
+        "province": "นนทบุรี",
+        "district": "ปากเกร็ด",
+        "count": 57281
+    },
+    {
+        "province": "นนทบุรี",
+        "district": "เมืองนนทบุรี",
+        "count": 49091
+    },
+    {
+        "province": "นนทบุรี",
+        "district": "ไทรน้อย",
+        "count": 12600
+    },
+    {
+        "province": "นราธิวาส",
+        "district": "จะแนะ",
+        "count": 7864
+    },
+    {
+        "province": "นราธิวาส",
+        "district": "ตากใบ",
+        "count": 13858
+    },
+    {
+        "province": "นราธิวาส",
+        "district": "บาเจาะ",
+        "count": 13378
+    },
+    {
+        "province": "นราธิวาส",
+        "district": "ยี่งอ",
+        "count": 11144
+    },
+    {
+        "province": "นราธิวาส",
+        "district": "ระแงะ",
+        "count": 24791
+    },
+    {
+        "province": "นราธิวาส",
+        "district": "รือเสาะ",
+        "count": 19221
+    },
+    {
+        "province": "นราธิวาส",
+        "district": "ศรีสาคร",
+        "count": 8667
+    },
+    {
+        "province": "นราธิวาส",
+        "district": "สุคิริน",
+        "count": 4985
+    },
+    {
+        "province": "นราธิวาส",
+        "district": "สุไหงปาดี",
+        "count": 9828
+    },
+    {
+        "province": "นราธิวาส",
+        "district": "สุไหงโก-ลก",
+        "count": 18773
+    },
+    {
+        "province": "นราธิวาส",
+        "district": "เจาะไอร้อง",
+        "count": 9601
+    },
+    {
+        "province": "นราธิวาส",
+        "district": "เมืองนราธิวาส",
+        "count": 33418
+    },
+    {
+        "province": "นราธิวาส",
+        "district": "แว้ง",
+        "count": 13285
+    },
+    {
+        "province": "น่าน",
+        "district": "ทุ่งช้าง",
+        "count": 3012
+    },
+    {
+        "province": "น่าน",
+        "district": "ท่าวังผา",
+        "count": 6696
+    },
+    {
+        "province": "น่าน",
+        "district": "นาน้อย",
+        "count": 4399
+    },
+    {
+        "province": "น่าน",
+        "district": "นาหมื่น",
+        "count": 1872
+    },
+    {
+        "province": "น่าน",
+        "district": "บ่อเกลือ",
+        "count": 2774
+    },
+    {
+        "province": "น่าน",
+        "district": "บ้านหลวง",
+        "count": 1495
+    },
+    {
+        "province": "น่าน",
+        "district": "ปัว",
+        "count": 11084
+    },
+    {
+        "province": "น่าน",
+        "district": "ภูเพียง",
+        "count": 2008
+    },
+    {
+        "province": "น่าน",
+        "district": "สองแคว",
+        "count": 2102
+    },
+    {
+        "province": "น่าน",
+        "district": "สันติสุข",
+        "count": 2029
+    },
+    {
+        "province": "น่าน",
+        "district": "เฉลิมพระเกียรติ",
+        "count": 1835
+    },
+    {
+        "province": "น่าน",
+        "district": "เชียงกลาง",
+        "count": 3352
+    },
+    {
+        "province": "น่าน",
+        "district": "เมืองน่าน",
+        "count": 20535
+    },
+    {
+        "province": "น่าน",
+        "district": "เวียงสา",
+        "count": 10160
+    },
+    {
+        "province": "น่าน",
+        "district": "แม่จริม",
+        "count": 2762
+    },
+    {
+        "province": "บึงกาฬ",
+        "district": "บึงโขงหลง",
+        "count": 6593
+    },
+    {
+        "province": "บึงกาฬ",
+        "district": "บุ่งคล้า",
+        "count": 2584
+    },
+    {
+        "province": "บึงกาฬ",
+        "district": "ปากคาด",
+        "count": 10050
+    },
+    {
+        "province": "บึงกาฬ",
+        "district": "พรเจริญ",
+        "count": 9207
+    },
+    {
+        "province": "บึงกาฬ",
+        "district": "ศรีวิไล",
+        "count": 7553
+    },
+    {
+        "province": "บึงกาฬ",
+        "district": "เซกา",
+        "count": 18341
+    },
+    {
+        "province": "บึงกาฬ",
+        "district": "เมืองบึงกาฬ",
+        "count": 17491
+    },
+    {
+        "province": "บึงกาฬ",
+        "district": "โซ่พิสัย",
+        "count": 14887
+    },
+    {
+        "province": "บุรีรัมย์",
+        "district": "กระสัง",
+        "count": 17018
+    },
+    {
+        "province": "บุรีรัมย์",
+        "district": "คูเมือง",
+        "count": 11585
+    },
+    {
+        "province": "บุรีรัมย์",
+        "district": "ชำนิ",
+        "count": 5175
+    },
+    {
+        "province": "บุรีรัมย์",
+        "district": "นางรอง",
+        "count": 26890
+    },
+    {
+        "province": "บุรีรัมย์",
+        "district": "นาโพธิ์",
+        "count": 4809
+    },
+    {
+        "province": "บุรีรัมย์",
+        "district": "บ้านกรวด",
+        "count": 13403
+    },
+    {
+        "province": "บุรีรัมย์",
+        "district": "บ้านด่าน",
+        "count": 4594
+    },
+    {
+        "province": "บุรีรัมย์",
+        "district": "บ้านใหม่ไชยพจน์",
+        "count": 3950
+    },
+    {
+        "province": "บุรีรัมย์",
+        "district": "ประโคนชัย",
+        "count": 25821
+    },
+    {
+        "province": "บุรีรัมย์",
+        "district": "ปะคำ",
+        "count": 7480
+    },
+    {
+        "province": "บุรีรัมย์",
+        "district": "พลับพลาชัย",
+        "count": 7295
+    },
+    {
+        "province": "บุรีรัมย์",
+        "district": "พุทไธสง",
+        "count": 8853
+    },
+    {
+        "province": "บุรีรัมย์",
+        "district": "ละหานทราย",
+        "count": 14447
+    },
+    {
+        "province": "บุรีรัมย์",
+        "district": "ลำปลายมาศ",
+        "count": 20853
+    },
+    {
+        "province": "บุรีรัมย์",
+        "district": "สตึก",
+        "count": 22069
+    },
+    {
+        "province": "บุรีรัมย์",
+        "district": "หนองกี่",
+        "count": 13181
+    },
+    {
+        "province": "บุรีรัมย์",
+        "district": "หนองหงส์",
+        "count": 8041
+    },
+    {
+        "province": "บุรีรัมย์",
+        "district": "ห้วยราช",
+        "count": 6385
+    },
+    {
+        "province": "บุรีรัมย์",
+        "district": "เฉลิมพระเกียรติ",
+        "count": 4950
+    },
+    {
+        "province": "บุรีรัมย์",
+        "district": "เมืองบุรีรัมย์",
+        "count": 47656
+    },
+    {
+        "province": "บุรีรัมย์",
+        "district": "แคนดง",
+        "count": 4958
+    },
+    {
+        "province": "บุรีรัมย์",
+        "district": "โนนดินแดง",
+        "count": 6078
+    },
+    {
+        "province": "บุรีรัมย์",
+        "district": "โนนสุวรรณ",
+        "count": 4496
+    },
+    {
+        "province": "ปทุมธานี",
+        "district": "คลองหลวง",
+        "count": 38851
+    },
+    {
+        "province": "ปทุมธานี",
+        "district": "ธัญบุรี",
+        "count": 40414
+    },
+    {
+        "province": "ปทุมธานี",
+        "district": "ลาดหลุมแก้ว",
+        "count": 12073
+    },
+    {
+        "province": "ปทุมธานี",
+        "district": "ลำลูกกา",
+        "count": 34497
+    },
+    {
+        "province": "ปทุมธานี",
+        "district": "สามโคก",
+        "count": 10154
+    },
+    {
+        "province": "ปทุมธานี",
+        "district": "หนองเสือ",
+        "count": 7904
+    },
+    {
+        "province": "ปทุมธานี",
+        "district": "เมืองปทุมธานี",
+        "count": 38088
+    },
+    {
+        "province": "ประจวบคีรีขันธ์",
+        "district": "กุยบุรี",
+        "count": 6576
+    },
+    {
+        "province": "ประจวบคีรีขันธ์",
+        "district": "ทับสะแก",
+        "count": 7258
+    },
+    {
+        "province": "ประจวบคีรีขันธ์",
+        "district": "บางสะพาน",
+        "count": 15404
+    },
+    {
+        "province": "ประจวบคีรีขันธ์",
+        "district": "บางสะพานน้อย",
+        "count": 6451
+    },
+    {
+        "province": "ประจวบคีรีขันธ์",
+        "district": "ปราณบุรี",
+        "count": 15237
+    },
+    {
+        "province": "ประจวบคีรีขันธ์",
+        "district": "สามร้อยยอด",
+        "count": 7568
+    },
+    {
+        "province": "ประจวบคีรีขันธ์",
+        "district": "หัวหิน",
+        "count": 25355
+    },
+    {
+        "province": "ประจวบคีรีขันธ์",
+        "district": "เมืองประจวบคีรีขันธ์",
+        "count": 15887
+    },
+    {
+        "province": "ปราจีนบุรี",
+        "district": "กบินทร์บุรี",
+        "count": 28682
+    },
+    {
+        "province": "ปราจีนบุรี",
+        "district": "นาดี",
+        "count": 8430
+    },
+    {
+        "province": "ปราจีนบุรี",
+        "district": "บ้านสร้าง",
+        "count": 3512
+    },
+    {
+        "province": "ปราจีนบุรี",
+        "district": "ประจันตคาม",
+        "count": 6843
+    },
+    {
+        "province": "ปราจีนบุรี",
+        "district": "ศรีมหาโพธิ",
+        "count": 16785
+    },
+    {
+        "province": "ปราจีนบุรี",
+        "district": "ศรีมโหสถ",
+        "count": 5552
+    },
+    {
+        "province": "ปราจีนบุรี",
+        "district": "เมืองปราจีนบุรี",
+        "count": 26185
+    },
+    {
+        "province": "ปัตตานี",
+        "district": "กะพ้อ",
+        "count": 2758
+    },
+    {
+        "province": "ปัตตานี",
+        "district": "ทุ่งยางแดง",
+        "count": 8976
+    },
+    {
+        "province": "ปัตตานี",
+        "district": "ปะนาเระ",
+        "count": 13471
+    },
+    {
+        "province": "ปัตตานี",
+        "district": "มายอ",
+        "count": 16437
+    },
+    {
+        "province": "ปัตตานี",
+        "district": "ยะรัง",
+        "count": 26227
+    },
+    {
+        "province": "ปัตตานี",
+        "district": "ยะหริ่ง",
+        "count": 19537
+    },
+    {
+        "province": "ปัตตานี",
+        "district": "สายบุรี",
+        "count": 26189
+    },
+    {
+        "province": "ปัตตานี",
+        "district": "หนองจิก",
+        "count": 19827
+    },
+    {
+        "province": "ปัตตานี",
+        "district": "เมืองปัตตานี",
+        "count": 41132
+    },
+    {
+        "province": "ปัตตานี",
+        "district": "แม่ลาน",
+        "count": 3097
+    },
+    {
+        "province": "ปัตตานี",
+        "district": "โคกโพธิ์",
+        "count": 19648
+    },
+    {
+        "province": "ปัตตานี",
+        "district": "ไม้แก่น",
+        "count": 2873
+    },
+    {
+        "province": "พระนครศรีอยุธยา",
+        "district": "ท่าเรือ",
+        "count": 6548
+    },
+    {
+        "province": "พระนครศรีอยุธยา",
+        "district": "นครหลวง",
+        "count": 4618
+    },
+    {
+        "province": "พระนครศรีอยุธยา",
+        "district": "บางซ้าย",
+        "count": 2581
+    },
+    {
+        "province": "พระนครศรีอยุธยา",
+        "district": "บางบาล",
+        "count": 3089
+    },
+    {
+        "province": "พระนครศรีอยุธยา",
+        "district": "บางปะหัน",
+        "count": 5052
+    },
+    {
+        "province": "พระนครศรีอยุธยา",
+        "district": "บางปะอิน",
+        "count": 19179
+    },
+    {
+        "province": "พระนครศรีอยุธยา",
+        "district": "บางไทร",
+        "count": 6210
+    },
+    {
+        "province": "พระนครศรีอยุธยา",
+        "district": "บ้านแพรก",
+        "count": 1097
+    },
+    {
+        "province": "พระนครศรีอยุธยา",
+        "district": "ผักไห่",
+        "count": 4605
+    },
+    {
+        "province": "พระนครศรีอยุธยา",
+        "district": "พระนครศรีอยุธยา",
+        "count": 41423
+    },
+    {
+        "province": "พระนครศรีอยุธยา",
+        "district": "ภาชี",
+        "count": 5151
+    },
+    {
+        "province": "พระนครศรีอยุธยา",
+        "district": "มหาราช",
+        "count": 2418
+    },
+    {
+        "province": "พระนครศรีอยุธยา",
+        "district": "ลาดบัวหลวง",
+        "count": 5351
+    },
+    {
+        "province": "พระนครศรีอยุธยา",
+        "district": "วังน้อย",
+        "count": 12563
+    },
+    {
+        "province": "พระนครศรีอยุธยา",
+        "district": "อุทัย",
+        "count": 8896
+    },
+    {
+        "province": "พระนครศรีอยุธยา",
+        "district": "เสนา",
+        "count": 11199
+    },
+    {
+        "province": "พะเยา",
+        "district": "จุน",
+        "count": 6163
+    },
+    {
+        "province": "พะเยา",
+        "district": "ดอกคำใต้",
+        "count": 6342
+    },
+    {
+        "province": "พะเยา",
+        "district": "ปง",
+        "count": 7138
+    },
+    {
+        "province": "พะเยา",
+        "district": "ภูกามยาว",
+        "count": 1917
+    },
+    {
+        "province": "พะเยา",
+        "district": "ภูซาง",
+        "count": 3853
+    },
+    {
+        "province": "พะเยา",
+        "district": "เชียงคำ",
+        "count": 12903
+    },
+    {
+        "province": "พะเยา",
+        "district": "เชียงม่วน",
+        "count": 2211
+    },
+    {
+        "province": "พะเยา",
+        "district": "เมืองพะเยา",
+        "count": 20736
+    },
+    {
+        "province": "พะเยา",
+        "district": "แม่ใจ",
+        "count": 2999
+    },
+    {
+        "province": "พังงา",
+        "district": "กะปง",
+        "count": 1749
+    },
+    {
+        "province": "พังงา",
+        "district": "คุระบุรี",
+        "count": 6249
+    },
+    {
+        "province": "พังงา",
+        "district": "ตะกั่วทุ่ง",
+        "count": 6867
+    },
+    {
+        "province": "พังงา",
+        "district": "ตะกั่วป่า",
+        "count": 10989
+    },
+    {
+        "province": "พังงา",
+        "district": "ทับปุด",
+        "count": 5330
+    },
+    {
+        "province": "พังงา",
+        "district": "ท้ายเหมือง",
+        "count": 7215
+    },
+    {
+        "province": "พังงา",
+        "district": "เกาะยาว",
+        "count": 2904
+    },
+    {
+        "province": "พังงา",
+        "district": "เมืองพังงา",
+        "count": 10015
+    },
+    {
+        "province": "พัทลุง",
+        "district": "กงหรา",
+        "count": 8082
+    },
+    {
+        "province": "พัทลุง",
+        "district": "ควนขนุน",
+        "count": 9762
+    },
+    {
+        "province": "พัทลุง",
+        "district": "ตะโหมด",
+        "count": 6624
+    },
+    {
+        "province": "พัทลุง",
+        "district": "บางแก้ว",
+        "count": 4328
+    },
+    {
+        "province": "พัทลุง",
+        "district": "ปากพะยูน",
+        "count": 8497
+    },
+    {
+        "province": "พัทลุง",
+        "district": "ป่าบอน",
+        "count": 7381
+    },
+    {
+        "province": "พัทลุง",
+        "district": "ป่าพะยอม",
+        "count": 6954
+    },
+    {
+        "province": "พัทลุง",
+        "district": "ศรีนครินทร์",
+        "count": 2357
+    },
+    {
+        "province": "พัทลุง",
+        "district": "ศรีบรรพต",
+        "count": 2505
+    },
+    {
+        "province": "พัทลุง",
+        "district": "เขาชัยสน",
+        "count": 5512
+    },
+    {
+        "province": "พัทลุง",
+        "district": "เมืองพัทลุง",
+        "count": 28543
+    },
+    {
+        "province": "พิจิตร",
+        "district": "ดงเจริญ",
+        "count": 2318
+    },
+    {
+        "province": "พิจิตร",
+        "district": "ตะพานหิน",
+        "count": 11170
+    },
+    {
+        "province": "พิจิตร",
+        "district": "ทับคล้อ",
+        "count": 5101
+    },
+    {
+        "province": "พิจิตร",
+        "district": "บางมูลนาก",
+        "count": 6727
+    },
+    {
+        "province": "พิจิตร",
+        "district": "บึงนาราง",
+        "count": 3188
+    },
+    {
+        "province": "พิจิตร",
+        "district": "วชิรบารมี",
+        "count": 4875
+    },
+    {
+        "province": "พิจิตร",
+        "district": "วังทรายพูน",
+        "count": 2319
+    },
+    {
+        "province": "พิจิตร",
+        "district": "สากเหล็ก",
+        "count": 3378
+    },
+    {
+        "province": "พิจิตร",
+        "district": "สามง่าม",
+        "count": 5449
+    },
+    {
+        "province": "พิจิตร",
+        "district": "เมืองพิจิตร",
+        "count": 21830
+    },
+    {
+        "province": "พิจิตร",
+        "district": "โพทะเล",
+        "count": 6453
+    },
+    {
+        "province": "พิจิตร",
+        "district": "โพธิ์ประทับช้าง",
+        "count": 5287
+    },
+    {
+        "province": "พิษณุโลก",
+        "district": "ชาติตระการ",
+        "count": 6692
+    },
+    {
+        "province": "พิษณุโลก",
+        "district": "นครไทย",
+        "count": 14050
+    },
+    {
+        "province": "พิษณุโลก",
+        "district": "บางกระทุ่ม",
+        "count": 5153
+    },
+    {
+        "province": "พิษณุโลก",
+        "district": "บางระกำ",
+        "count": 12103
+    },
+    {
+        "province": "พิษณุโลก",
+        "district": "พรหมพิราม",
+        "count": 9364
+    },
+    {
+        "province": "พิษณุโลก",
+        "district": "วังทอง",
+        "count": 15988
+    },
+    {
+        "province": "พิษณุโลก",
+        "district": "วัดโบสถ์",
+        "count": 5180
+    },
+    {
+        "province": "พิษณุโลก",
+        "district": "เนินมะปราง",
+        "count": 8239
+    },
+    {
+        "province": "พิษณุโลก",
+        "district": "เมืองพิษณุโลก",
+        "count": 56940
+    },
+    {
+        "province": "ภูเก็ต",
+        "district": "กะทู้",
+        "count": 6991
+    },
+    {
+        "province": "ภูเก็ต",
+        "district": "ถลาง",
+        "count": 15280
+    },
+    {
+        "province": "ภูเก็ต",
+        "district": "เมืองภูเก็ต",
+        "count": 49521
+    },
+    {
+        "province": "มหาสารคาม",
+        "district": "กันทรวิชัย",
+        "count": 8036
+    },
+    {
+        "province": "มหาสารคาม",
+        "district": "กุดรัง",
+        "count": 4599
+    },
+    {
+        "province": "มหาสารคาม",
+        "district": "ชื่นชม",
+        "count": 3023
+    },
+    {
+        "province": "มหาสารคาม",
+        "district": "นาดูน",
+        "count": 6495
+    },
+    {
+        "province": "มหาสารคาม",
+        "district": "นาเชือก",
+        "count": 9541
+    },
+    {
+        "province": "มหาสารคาม",
+        "district": "บรบือ",
+        "count": 16381
+    },
+    {
+        "province": "มหาสารคาม",
+        "district": "พยัคฆภูมิพิสัย",
+        "count": 16851
+    },
+    {
+        "province": "มหาสารคาม",
+        "district": "ยางสีสุราช",
+        "count": 4779
+    },
+    {
+        "province": "มหาสารคาม",
+        "district": "วาปีปทุม",
+        "count": 18105
+    },
+    {
+        "province": "มหาสารคาม",
+        "district": "เชียงยืน",
+        "count": 8475
+    },
+    {
+        "province": "มหาสารคาม",
+        "district": "เมืองมหาสารคาม",
+        "count": 34439
+    },
+    {
+        "province": "มหาสารคาม",
+        "district": "แกดำ",
+        "count": 3652
+    },
+    {
+        "province": "มหาสารคาม",
+        "district": "โกสุมพิสัย",
+        "count": 17540
+    },
+    {
+        "province": "มุกดาหาร",
+        "district": "คำชะอี",
+        "count": 7363
+    },
+    {
+        "province": "มุกดาหาร",
+        "district": "ดงหลวง",
+        "count": 7423
+    },
+    {
+        "province": "มุกดาหาร",
+        "district": "ดอนตาล",
+        "count": 8256
+    },
+    {
+        "province": "มุกดาหาร",
+        "district": "นิคมคำสร้อย",
+        "count": 8171
+    },
+    {
+        "province": "มุกดาหาร",
+        "district": "หนองสูง",
+        "count": 3381
+    },
+    {
+        "province": "มุกดาหาร",
+        "district": "หว้านใหญ่",
+        "count": 2719
+    },
+    {
+        "province": "มุกดาหาร",
+        "district": "เมืองมุกดาหาร",
+        "count": 29137
+    },
+    {
+        "province": "ยะลา",
+        "district": "กรงปินัง",
+        "count": 5414
+    },
+    {
+        "province": "ยะลา",
+        "district": "กาบัง",
+        "count": 5756
+    },
+    {
+        "province": "ยะลา",
+        "district": "ธารโต",
+        "count": 5569
+    },
+    {
+        "province": "ยะลา",
+        "district": "บันนังสตา",
+        "count": 18423
+    },
+    {
+        "province": "ยะลา",
+        "district": "ยะหา",
+        "count": 16937
+    },
+    {
+        "province": "ยะลา",
+        "district": "รามัน",
+        "count": 22665
+    },
+    {
+        "province": "ยะลา",
+        "district": "เบตง",
+        "count": 12859
+    },
+    {
+        "province": "ยะลา",
+        "district": "เมืองยะลา",
+        "count": 52753
+    },
+    {
+        "province": "ยโสธร",
+        "district": "กุดชุม",
+        "count": 11738
+    },
+    {
+        "province": "ยโสธร",
+        "district": "คำเขื่อนแก้ว",
+        "count": 10682
+    },
+    {
+        "province": "ยโสธร",
+        "district": "ค้อวัง",
+        "count": 3966
+    },
+    {
+        "province": "ยโสธร",
+        "district": "ทรายมูล",
+        "count": 4391
+    },
+    {
+        "province": "ยโสธร",
+        "district": "ป่าติ้ว",
+        "count": 4233
+    },
+    {
+        "province": "ยโสธร",
+        "district": "มหาชนะชัย",
+        "count": 9807
+    },
+    {
+        "province": "ยโสธร",
+        "district": "เมืองยโสธร",
+        "count": 27345
+    },
+    {
+        "province": "ยโสธร",
+        "district": "เลิงนกทา",
+        "count": 17658
+    },
+    {
+        "province": "ยโสธร",
+        "district": "ไทยเจริญ",
+        "count": 4635
+    },
+    {
+        "province": "ระนอง",
+        "district": "กระบุรี",
+        "count": 8385
+    },
+    {
+        "province": "ระนอง",
+        "district": "กะเปอร์",
+        "count": 3976
+    },
+    {
+        "province": "ระนอง",
+        "district": "ละอุ่น",
+        "count": 1828
+    },
+    {
+        "province": "ระนอง",
+        "district": "สุขสำราญ",
+        "count": 3129
+    },
+    {
+        "province": "ระนอง",
+        "district": "เมืองระนอง",
+        "count": 19433
+    },
+    {
+        "province": "ระยอง",
+        "district": "นิคมพัฒนา",
+        "count": 9502
+    },
+    {
+        "province": "ระยอง",
+        "district": "บ้านค่าย",
+        "count": 12516
+    },
+    {
+        "province": "ระยอง",
+        "district": "บ้านฉาง",
+        "count": 14346
+    },
+    {
+        "province": "ระยอง",
+        "district": "ปลวกแดง",
+        "count": 15661
+    },
+    {
+        "province": "ระยอง",
+        "district": "วังจันทร์",
+        "count": 5134
+    },
+    {
+        "province": "ระยอง",
+        "district": "เขาชะเมา",
+        "count": 3360
+    },
+    {
+        "province": "ระยอง",
+        "district": "เมืองระยอง",
+        "count": 64278
+    },
+    {
+        "province": "ระยอง",
+        "district": "แกลง",
+        "count": 23639
+    },
+    {
+        "province": "ราชบุรี",
+        "district": "จอมบึง",
+        "count": 10214
+    },
+    {
+        "province": "ราชบุรี",
+        "district": "ดำเนินสะดวก",
+        "count": 13423
+    },
+    {
+        "province": "ราชบุรี",
+        "district": "บางแพ",
+        "count": 4663
+    },
+    {
+        "province": "ราชบุรี",
+        "district": "บ้านคา",
+        "count": 3797
+    },
+    {
+        "province": "ราชบุรี",
+        "district": "บ้านโป่ง",
+        "count": 35255
+    },
+    {
+        "province": "ราชบุรี",
+        "district": "ปากท่อ",
+        "count": 9334
+    },
+    {
+        "province": "ราชบุรี",
+        "district": "วัดเพลง",
+        "count": 1917
+    },
+    {
+        "province": "ราชบุรี",
+        "district": "สวนผึ้ง",
+        "count": 8926
+    },
+    {
+        "province": "ราชบุรี",
+        "district": "เมืองราชบุรี",
+        "count": 48229
+    },
+    {
+        "province": "ราชบุรี",
+        "district": "โพธาราม",
+        "count": 20285
+    },
+    {
+        "province": "ร้อยเอ็ด",
+        "district": "จตุรพักตรพิมาน",
+        "count": 10443
+    },
+    {
+        "province": "ร้อยเอ็ด",
+        "district": "จังหาร",
+        "count": 4114
+    },
+    {
+        "province": "ร้อยเอ็ด",
+        "district": "ทุ่งเขาหลวง",
+        "count": 2009
+    },
+    {
+        "province": "ร้อยเอ็ด",
+        "district": "ธวัชบุรี",
+        "count": 9725
+    },
+    {
+        "province": "ร้อยเอ็ด",
+        "district": "ปทุมรัตต์",
+        "count": 8794
+    },
+    {
+        "province": "ร้อยเอ็ด",
+        "district": "พนมไพร",
+        "count": 9516
+    },
+    {
+        "province": "ร้อยเอ็ด",
+        "district": "ศรีสมเด็จ",
+        "count": 5306
+    },
+    {
+        "province": "ร้อยเอ็ด",
+        "district": "สุวรรณภูมิ",
+        "count": 19364
+    },
+    {
+        "province": "ร้อยเอ็ด",
+        "district": "หนองพอก",
+        "count": 10955
+    },
+    {
+        "province": "ร้อยเอ็ด",
+        "district": "หนองฮี",
+        "count": 2972
+    },
+    {
+        "province": "ร้อยเอ็ด",
+        "district": "อาจสามารถ",
+        "count": 9309
+    },
+    {
+        "province": "ร้อยเอ็ด",
+        "district": "เกษตรวิสัย",
+        "count": 14742
+    },
+    {
+        "province": "ร้อยเอ็ด",
+        "district": "เชียงขวัญ",
+        "count": 3766
+    },
+    {
+        "province": "ร้อยเอ็ด",
+        "district": "เมยวดี",
+        "count": 3494
+    },
+    {
+        "province": "ร้อยเอ็ด",
+        "district": "เมืองร้อยเอ็ด",
+        "count": 42837
+    },
+    {
+        "province": "ร้อยเอ็ด",
+        "district": "เมืองสรวง",
+        "count": 3780
+    },
+    {
+        "province": "ร้อยเอ็ด",
+        "district": "เสลภูมิ",
+        "count": 19930
+    },
+    {
+        "province": "ร้อยเอ็ด",
+        "district": "โพธิ์ชัย",
+        "count": 7979
+    },
+    {
+        "province": "ร้อยเอ็ด",
+        "district": "โพนทราย",
+        "count": 4159
+    },
+    {
+        "province": "ร้อยเอ็ด",
+        "district": "โพนทอง",
+        "count": 20938
+    },
+    {
+        "province": "ลพบุรี",
+        "district": "ชัยบาดาล",
+        "count": 20151
+    },
+    {
+        "province": "ลพบุรี",
+        "district": "ท่าวุ้ง",
+        "count": 4872
+    },
+    {
+        "province": "ลพบุรี",
+        "district": "ท่าหลวง",
+        "count": 3908
+    },
+    {
+        "province": "ลพบุรี",
+        "district": "บ้านหมี่",
+        "count": 8366
+    },
+    {
+        "province": "ลพบุรี",
+        "district": "พัฒนานิคม",
+        "count": 12111
+    },
+    {
+        "province": "ลพบุรี",
+        "district": "ลำสนธิ",
+        "count": 4021
+    },
+    {
+        "province": "ลพบุรี",
+        "district": "สระโบสถ์",
+        "count": 2298
+    },
+    {
+        "province": "ลพบุรี",
+        "district": "หนองม่วง",
+        "count": 6410
+    },
+    {
+        "province": "ลพบุรี",
+        "district": "เมืองลพบุรี",
+        "count": 52684
+    },
+    {
+        "province": "ลพบุรี",
+        "district": "โคกสำโรง",
+        "count": 11627
+    },
+    {
+        "province": "ลพบุรี",
+        "district": "โคกเจริญ",
+        "count": 3433
+    },
+    {
+        "province": "ลำปาง",
+        "district": "งาว",
+        "count": 6452
+    },
+    {
+        "province": "ลำปาง",
+        "district": "วังเหนือ",
+        "count": 4722
+    },
+    {
+        "province": "ลำปาง",
+        "district": "สบปราบ",
+        "count": 2829
+    },
+    {
+        "province": "ลำปาง",
+        "district": "ห้างฉัตร",
+        "count": 3902
+    },
+    {
+        "province": "ลำปาง",
+        "district": "เกาะคา",
+        "count": 5410
+    },
+    {
+        "province": "ลำปาง",
+        "district": "เถิน",
+        "count": 8548
+    },
+    {
+        "province": "ลำปาง",
+        "district": "เมืองปาน",
+        "count": 3326
+    },
+    {
+        "province": "ลำปาง",
+        "district": "เมืองลำปาง",
+        "count": 40766
+    },
+    {
+        "province": "ลำปาง",
+        "district": "เสริมงาม",
+        "count": 3179
+    },
+    {
+        "province": "ลำปาง",
+        "district": "แจ้ห่ม",
+        "count": 4611
+    },
+    {
+        "province": "ลำปาง",
+        "district": "แม่ทะ",
+        "count": 3475
+    },
+    {
+        "province": "ลำปาง",
+        "district": "แม่พริก",
+        "count": 2193
+    },
+    {
+        "province": "ลำปาง",
+        "district": "แม่เมาะ",
+        "count": 5513
+    },
+    {
+        "province": "ลำพูน",
+        "district": "ทุ่งหัวช้าง",
+        "count": 2849
+    },
+    {
+        "province": "ลำพูน",
+        "district": "บ้านธิ",
+        "count": 2817
+    },
+    {
+        "province": "ลำพูน",
+        "district": "บ้านโฮ่ง",
+        "count": 4879
+    },
+    {
+        "province": "ลำพูน",
+        "district": "ป่าซาง",
+        "count": 6935
+    },
+    {
+        "province": "ลำพูน",
+        "district": "ลี้",
+        "count": 10199
+    },
+    {
+        "province": "ลำพูน",
+        "district": "เมืองลำพูน",
+        "count": 26457
+    },
+    {
+        "province": "ลำพูน",
+        "district": "เวียงหนองล่อง",
+        "count": 1008
+    },
+    {
+        "province": "ลำพูน",
+        "district": "แม่ทา",
+        "count": 4318
+    },
+    {
+        "province": "ศรีสะเกษ",
+        "district": "กันทรลักษ์",
+        "count": 37361
+    },
+    {
+        "province": "ศรีสะเกษ",
+        "district": "กันทรารมย์",
+        "count": 18665
+    },
+    {
+        "province": "ศรีสะเกษ",
+        "district": "ขุขันธ์",
+        "count": 28106
+    },
+    {
+        "province": "ศรีสะเกษ",
+        "district": "ขุนหาญ",
+        "count": 14510
+    },
+    {
+        "province": "ศรีสะเกษ",
+        "district": "น้ำเกลี้ยง",
+        "count": 7330
+    },
+    {
+        "province": "ศรีสะเกษ",
+        "district": "บึงบูรพ์",
+        "count": 1435
+    },
+    {
+        "province": "ศรีสะเกษ",
+        "district": "ปรางค์กู่",
+        "count": 11427
+    },
+    {
+        "province": "ศรีสะเกษ",
+        "district": "พยุห์",
+        "count": 4138
+    },
+    {
+        "province": "ศรีสะเกษ",
+        "district": "ภูสิงห์",
+        "count": 9883
+    },
+    {
+        "province": "ศรีสะเกษ",
+        "district": "ยางชุมน้อย",
+        "count": 5329
+    },
+    {
+        "province": "ศรีสะเกษ",
+        "district": "ราษีไศล",
+        "count": 10983
+    },
+    {
+        "province": "ศรีสะเกษ",
+        "district": "วังหิน",
+        "count": 6494
+    },
+    {
+        "province": "ศรีสะเกษ",
+        "district": "ศรีรัตนะ",
+        "count": 8767
+    },
+    {
+        "province": "ศรีสะเกษ",
+        "district": "ศิลาลาด",
+        "count": 2131
+    },
+    {
+        "province": "ศรีสะเกษ",
+        "district": "ห้วยทับทัน",
+        "count": 6190
+    },
+    {
+        "province": "ศรีสะเกษ",
+        "district": "อุทุมพรพิสัย",
+        "count": 18564
+    },
+    {
+        "province": "ศรีสะเกษ",
+        "district": "เบญจลักษ์",
+        "count": 5472
+    },
+    {
+        "province": "ศรีสะเกษ",
+        "district": "เมืองจันทร์",
+        "count": 2161
+    },
+    {
+        "province": "ศรีสะเกษ",
+        "district": "เมืองศรีสะเกษ",
+        "count": 40882
+    },
+    {
+        "province": "ศรีสะเกษ",
+        "district": "โนนคูณ",
+        "count": 5264
+    },
+    {
+        "province": "ศรีสะเกษ",
+        "district": "โพธิ์ศรีสุวรรณ",
+        "count": 2629
+    },
+    {
+        "province": "ศรีสะเกษ",
+        "district": "ไพรบึง",
+        "count": 5751
+    },
+    {
+        "province": "สกลนคร",
+        "district": "กุดบาก",
+        "count": 5945
+    },
+    {
+        "province": "สกลนคร",
+        "district": "กุสุมาลย์",
+        "count": 8702
+    },
+    {
+        "province": "สกลนคร",
+        "district": "คำตากล้า",
+        "count": 6027
+    },
+    {
+        "province": "สกลนคร",
+        "district": "นิคมน้ำอูน",
+        "count": 2946
+    },
+    {
+        "province": "สกลนคร",
+        "district": "บ้านม่วง",
+        "count": 12171
+    },
+    {
+        "province": "สกลนคร",
+        "district": "พรรณานิคม",
+        "count": 14329
+    },
+    {
+        "province": "สกลนคร",
+        "district": "พังโคน",
+        "count": 10008
+    },
+    {
+        "province": "สกลนคร",
+        "district": "ภูพาน",
+        "count": 5892
+    },
+    {
+        "province": "สกลนคร",
+        "district": "วานรนิวาส",
+        "count": 21525
+    },
+    {
+        "province": "สกลนคร",
+        "district": "วาริชภูมิ",
+        "count": 8566
+    },
+    {
+        "province": "สกลนคร",
+        "district": "สว่างแดนดิน",
+        "count": 34463
+    },
+    {
+        "province": "สกลนคร",
+        "district": "ส่องดาว",
+        "count": 5380
+    },
+    {
+        "province": "สกลนคร",
+        "district": "อากาศอำนวย",
+        "count": 13214
+    },
+    {
+        "province": "สกลนคร",
+        "district": "เจริญศิลป์",
+        "count": 7636
+    },
+    {
+        "province": "สกลนคร",
+        "district": "เต่างอย",
+        "count": 4015
+    },
+    {
+        "province": "สกลนคร",
+        "district": "เมืองสกลนคร",
+        "count": 47249
+    },
+    {
+        "province": "สกลนคร",
+        "district": "โคกศรีสุพรรณ",
+        "count": 6184
+    },
+    {
+        "province": "สกลนคร",
+        "district": "โพนนาแก้ว",
+        "count": 5517
+    },
+    {
+        "province": "สงขลา",
+        "district": "กระแสสินธุ์",
+        "count": 1726
+    },
+    {
+        "province": "สงขลา",
+        "district": "คลองหอยโข่ง",
+        "count": 2633
+    },
+    {
+        "province": "สงขลา",
+        "district": "ควนเนียง",
+        "count": 5589
+    },
+    {
+        "province": "สงขลา",
+        "district": "จะนะ",
+        "count": 27477
+    },
+    {
+        "province": "สงขลา",
+        "district": "นาทวี",
+        "count": 16197
+    },
+    {
+        "province": "สงขลา",
+        "district": "นาหม่อม",
+        "count": 2826
+    },
+    {
+        "province": "สงขลา",
+        "district": "บางกล่ำ",
+        "count": 4331
+    },
+    {
+        "province": "สงขลา",
+        "district": "ระโนด",
+        "count": 9540
+    },
+    {
+        "province": "สงขลา",
+        "district": "รัตภูมิ",
+        "count": 15564
+    },
+    {
+        "province": "สงขลา",
+        "district": "สทิงพระ",
+        "count": 6799
+    },
+    {
+        "province": "สงขลา",
+        "district": "สะบ้าย้อย",
+        "count": 17034
+    },
+    {
+        "province": "สงขลา",
+        "district": "สะเดา",
+        "count": 19963
+    },
+    {
+        "province": "สงขลา",
+        "district": "สิงหนคร",
+        "count": 11031
+    },
+    {
+        "province": "สงขลา",
+        "district": "หาดใหญ่",
+        "count": 93243
+    },
+    {
+        "province": "สงขลา",
+        "district": "เทพา",
+        "count": 16103
+    },
+    {
+        "province": "สงขลา",
+        "district": "เมืองสงขลา",
+        "count": 38694
+    },
+    {
+        "province": "สตูล",
+        "district": "ควนกาหลง",
+        "count": 8371
+    },
+    {
+        "province": "สตูล",
+        "district": "ควนโดน",
+        "count": 7182
+    },
+    {
+        "province": "สตูล",
+        "district": "ทุ่งหว้า",
+        "count": 5363
+    },
+    {
+        "province": "สตูล",
+        "district": "ท่าแพ",
+        "count": 5790
+    },
+    {
+        "province": "สตูล",
+        "district": "มะนัง",
+        "count": 3887
+    },
+    {
+        "province": "สตูล",
+        "district": "ละงู",
+        "count": 15453
+    },
+    {
+        "province": "สตูล",
+        "district": "เมืองสตูล",
+        "count": 27442
+    },
+    {
+        "province": "สมุทรปราการ",
+        "district": "บางบ่อ",
+        "count": 21295
+    },
+    {
+        "province": "สมุทรปราการ",
+        "district": "บางพลี",
+        "count": 44588
+    },
+    {
+        "province": "สมุทรปราการ",
+        "district": "บางเสาธง",
+        "count": 13750
+    },
+    {
+        "province": "สมุทรปราการ",
+        "district": "พระประแดง",
+        "count": 29029
+    },
+    {
+        "province": "สมุทรปราการ",
+        "district": "พระสมุทรเจดีย์",
+        "count": 16279
+    },
+    {
+        "province": "สมุทรปราการ",
+        "district": "เมืองสมุทรปราการ",
+        "count": 85139
+    },
+    {
+        "province": "สมุทรสงคราม",
+        "district": "บางคนที",
+        "count": 2772
+    },
+    {
+        "province": "สมุทรสงคราม",
+        "district": "อัมพวา",
+        "count": 5537
+    },
+    {
+        "province": "สมุทรสงคราม",
+        "district": "เมืองสมุทรสงคราม",
+        "count": 18638
+    },
+    {
+        "province": "สมุทรสาคร",
+        "district": "กระทุ่มแบน",
+        "count": 20552
+    },
+    {
+        "province": "สมุทรสาคร",
+        "district": "บ้านแพ้ว",
+        "count": 11182
+    },
+    {
+        "province": "สมุทรสาคร",
+        "district": "เมืองสมุทรสาคร",
+        "count": 48390
+    },
+    {
+        "province": "สระบุรี",
+        "district": "ดอนพุด",
+        "count": 926
+    },
+    {
+        "province": "สระบุรี",
+        "district": "บ้านหมอ",
+        "count": 6533
+    },
+    {
+        "province": "สระบุรี",
+        "district": "พระพุทธบาท",
+        "count": 8861
+    },
+    {
+        "province": "สระบุรี",
+        "district": "มวกเหล็ก",
+        "count": 10786
+    },
+    {
+        "province": "สระบุรี",
+        "district": "วังม่วง",
+        "count": 4419
+    },
+    {
+        "province": "สระบุรี",
+        "district": "วิหารแดง",
+        "count": 6430
+    },
+    {
+        "province": "สระบุรี",
+        "district": "หนองแค",
+        "count": 13266
+    },
+    {
+        "province": "สระบุรี",
+        "district": "หนองแซง",
+        "count": 1672
+    },
+    {
+        "province": "สระบุรี",
+        "district": "หนองโดน",
+        "count": 903
+    },
+    {
+        "province": "สระบุรี",
+        "district": "เฉลิมพระเกียรติ",
+        "count": 5551
+    },
+    {
+        "province": "สระบุรี",
+        "district": "เมืองสระบุรี",
+        "count": 28770
+    },
+    {
+        "province": "สระบุรี",
+        "district": "เสาไห้",
+        "count": 6893
+    },
+    {
+        "province": "สระบุรี",
+        "district": "แก่งคอย",
+        "count": 15673
+    },
+    {
+        "province": "สระแก้ว",
+        "district": "คลองหาด",
+        "count": 6062
+    },
+    {
+        "province": "สระแก้ว",
+        "district": "ตาพระยา",
+        "count": 9737
+    },
+    {
+        "province": "สระแก้ว",
+        "district": "วังน้ำเย็น",
+        "count": 13592
+    },
+    {
+        "province": "สระแก้ว",
+        "district": "วังสมบูรณ์",
+        "count": 6269
+    },
+    {
+        "province": "สระแก้ว",
+        "district": "วัฒนานคร",
+        "count": 16143
+    },
+    {
+        "province": "สระแก้ว",
+        "district": "อรัญประเทศ",
+        "count": 18245
+    },
+    {
+        "province": "สระแก้ว",
+        "district": "เขาฉกรรจ์",
+        "count": 7465
+    },
+    {
+        "province": "สระแก้ว",
+        "district": "เมืองสระแก้ว",
+        "count": 19907
+    },
+    {
+        "province": "สระแก้ว",
+        "district": "โคกสูง",
+        "count": 3784
+    },
+    {
+        "province": "สิงห์บุรี",
+        "district": "ค่ายบางระจัน",
+        "count": 3034
+    },
+    {
+        "province": "สิงห์บุรี",
+        "district": "ท่าช้าง",
+        "count": 2775
+    },
+    {
+        "province": "สิงห์บุรี",
+        "district": "บางระจัน",
+        "count": 4122
+    },
+    {
+        "province": "สิงห์บุรี",
+        "district": "พรหมบุรี",
+        "count": 2448
+    },
+    {
+        "province": "สิงห์บุรี",
+        "district": "อินทร์บุรี",
+        "count": 7035
+    },
+    {
+        "province": "สิงห์บุรี",
+        "district": "เมืองสิงห์บุรี",
+        "count": 15036
+    },
+    {
+        "province": "สุพรรณบุรี",
+        "district": "ดอนเจดีย์",
+        "count": 7879
+    },
+    {
+        "province": "สุพรรณบุรี",
+        "district": "ด่านช้าง",
+        "count": 13439
+    },
+    {
+        "province": "สุพรรณบุรี",
+        "district": "บางปลาม้า",
+        "count": 8210
+    },
+    {
+        "province": "สุพรรณบุรี",
+        "district": "ศรีประจันต์",
+        "count": 6083
+    },
+    {
+        "province": "สุพรรณบุรี",
+        "district": "สองพี่น้อง",
+        "count": 16924
+    },
+    {
+        "province": "สุพรรณบุรี",
+        "district": "สามชุก",
+        "count": 7618
+    },
+    {
+        "province": "สุพรรณบุรี",
+        "district": "หนองหญ้าไซ",
+        "count": 5129
+    },
+    {
+        "province": "สุพรรณบุรี",
+        "district": "อู่ทอง",
+        "count": 20915
+    },
+    {
+        "province": "สุพรรณบุรี",
+        "district": "เดิมบางนางบวช",
+        "count": 9685
+    },
+    {
+        "province": "สุพรรณบุรี",
+        "district": "เมืองสุพรรณบุรี",
+        "count": 37089
+    },
+    {
+        "province": "สุราษฎร์ธานี",
+        "district": "กาญจนดิษฐ์",
+        "count": 16242
+    },
+    {
+        "province": "สุราษฎร์ธานี",
+        "district": "คีรีรัฐนิคม",
+        "count": 6560
+    },
+    {
+        "province": "สุราษฎร์ธานี",
+        "district": "ชัยบุรี",
+        "count": 5450
+    },
+    {
+        "province": "สุราษฎร์ธานี",
+        "district": "ดอนสัก",
+        "count": 5519
+    },
+    {
+        "province": "สุราษฎร์ธานี",
+        "district": "ท่าฉาง",
+        "count": 4189
+    },
+    {
+        "province": "สุราษฎร์ธานี",
+        "district": "ท่าชนะ",
+        "count": 7809
+    },
+    {
+        "province": "สุราษฎร์ธานี",
+        "district": "บ้านตาขุน",
+        "count": 3224
+    },
+    {
+        "province": "สุราษฎร์ธานี",
+        "district": "บ้านนาสาร",
+        "count": 11376
+    },
+    {
+        "province": "สุราษฎร์ธานี",
+        "district": "บ้านนาเดิม",
+        "count": 3836
+    },
+    {
+        "province": "สุราษฎร์ธานี",
+        "district": "พนม",
+        "count": 8437
+    },
+    {
+        "province": "สุราษฎร์ธานี",
+        "district": "พระแสง",
+        "count": 12432
+    },
+    {
+        "province": "สุราษฎร์ธานี",
+        "district": "พุนพิน",
+        "count": 14393
+    },
+    {
+        "province": "สุราษฎร์ธานี",
+        "district": "วิภาวดี",
+        "count": 2997
+    },
+    {
+        "province": "สุราษฎร์ธานี",
+        "district": "เกาะพะงัน",
+        "count": 2545
+    },
+    {
+        "province": "สุราษฎร์ธานี",
+        "district": "เกาะสมุย",
+        "count": 13742
+    },
+    {
+        "province": "สุราษฎร์ธานี",
+        "district": "เคียนซา",
+        "count": 9644
+    },
+    {
+        "province": "สุราษฎร์ธานี",
+        "district": "เมืองสุราษฎร์ธานี",
+        "count": 52576
+    },
+    {
+        "province": "สุราษฎร์ธานี",
+        "district": "เวียงสระ",
+        "count": 13101
+    },
+    {
+        "province": "สุราษฎร์ธานี",
+        "district": "ไชยา",
+        "count": 13049
+    },
+    {
+        "province": "สุรินทร์",
+        "district": "กาบเชิง",
+        "count": 11460
+    },
+    {
+        "province": "สุรินทร์",
+        "district": "จอมพระ",
+        "count": 10553
+    },
+    {
+        "province": "สุรินทร์",
+        "district": "ชุมพลบุรี",
+        "count": 10127
+    },
+    {
+        "province": "สุรินทร์",
+        "district": "ท่าตูม",
+        "count": 17097
+    },
+    {
+        "province": "สุรินทร์",
+        "district": "บัวเชด",
+        "count": 8367
+    },
+    {
+        "province": "สุรินทร์",
+        "district": "ปราสาท",
+        "count": 27641
+    },
+    {
+        "province": "สุรินทร์",
+        "district": "พนมดงรัก",
+        "count": 6495
+    },
+    {
+        "province": "สุรินทร์",
+        "district": "รัตนบุรี",
+        "count": 16211
+    },
+    {
+        "province": "สุรินทร์",
+        "district": "ลำดวน",
+        "count": 5980
+    },
+    {
+        "province": "สุรินทร์",
+        "district": "ศรีณรงค์",
+        "count": 6846
+    },
+    {
+        "province": "สุรินทร์",
+        "district": "ศีขรภูมิ",
+        "count": 23686
+    },
+    {
+        "province": "สุรินทร์",
+        "district": "สนม",
+        "count": 6528
+    },
+    {
+        "province": "สุรินทร์",
+        "district": "สังขะ",
+        "count": 24950
+    },
+    {
+        "province": "สุรินทร์",
+        "district": "สำโรงทาบ",
+        "count": 9003
+    },
+    {
+        "province": "สุรินทร์",
+        "district": "เขวาสินรินทร์",
+        "count": 4798
+    },
+    {
+        "province": "สุรินทร์",
+        "district": "เมืองสุรินทร์",
+        "count": 55382
+    },
+    {
+        "province": "สุรินทร์",
+        "district": "โนนนารายณ์",
+        "count": 5021
+    },
+    {
+        "province": "สุโขทัย",
+        "district": "กงไกรลาศ",
+        "count": 7064
+    },
+    {
+        "province": "สุโขทัย",
+        "district": "คีรีมาศ",
+        "count": 7172
+    },
+    {
+        "province": "สุโขทัย",
+        "district": "ทุ่งเสลี่ยม",
+        "count": 6549
+    },
+    {
+        "province": "สุโขทัย",
+        "district": "บ้านด่านลานหอย",
+        "count": 7215
+    },
+    {
+        "province": "สุโขทัย",
+        "district": "ศรีนคร",
+        "count": 3300
+    },
+    {
+        "province": "สุโขทัย",
+        "district": "ศรีสัชนาลัย",
+        "count": 11383
+    },
+    {
+        "province": "สุโขทัย",
+        "district": "ศรีสำโรง",
+        "count": 10310
+    },
+    {
+        "province": "สุโขทัย",
+        "district": "สวรรคโลก",
+        "count": 11534
+    },
+    {
+        "province": "สุโขทัย",
+        "district": "เมืองสุโขทัย",
+        "count": 22725
+    },
+    {
+        "province": "หนองคาย",
+        "district": "ท่าบ่อ",
+        "count": 11478
+    },
+    {
+        "province": "หนองคาย",
+        "district": "รัตนวาปี",
+        "count": 5718
+    },
+    {
+        "province": "หนองคาย",
+        "district": "ศรีเชียงใหม่",
+        "count": 4839
+    },
+    {
+        "province": "หนองคาย",
+        "district": "สระใคร",
+        "count": 4530
+    },
+    {
+        "province": "หนองคาย",
+        "district": "สังคม",
+        "count": 5823
+    },
+    {
+        "province": "หนองคาย",
+        "district": "เฝ้าไร่",
+        "count": 7173
+    },
+    {
+        "province": "หนองคาย",
+        "district": "เมืองหนองคาย",
+        "count": 29110
+    },
+    {
+        "province": "หนองคาย",
+        "district": "โพธิ์ตาก",
+        "count": 2299
+    },
+    {
+        "province": "หนองคาย",
+        "district": "โพนพิสัย",
+        "count": 20391
+    },
+    {
+        "province": "หนองบัวลำภู",
+        "district": "นากลาง",
+        "count": 16150
+    },
+    {
+        "province": "หนองบัวลำภู",
+        "district": "นาวัง",
+        "count": 5517
+    },
+    {
+        "province": "หนองบัวลำภู",
+        "district": "ศรีบุญเรือง",
+        "count": 19980
+    },
+    {
+        "province": "หนองบัวลำภู",
+        "district": "สุวรรณคูหา",
+        "count": 11384
+    },
+    {
+        "province": "หนองบัวลำภู",
+        "district": "เมืองหนองบัวลำภู",
+        "count": 27703
+    },
+    {
+        "province": "หนองบัวลำภู",
+        "district": "โนนสัง",
+        "count": 9948
+    },
+    {
+        "province": "อำนาจเจริญ",
+        "district": "ชานุมาน",
+        "count": 7169
+    },
+    {
+        "province": "อำนาจเจริญ",
+        "district": "ปทุมราชวงศา",
+        "count": 10030
+    },
+    {
+        "province": "อำนาจเจริญ",
+        "district": "พนา",
+        "count": 4951
+    },
+    {
+        "province": "อำนาจเจริญ",
+        "district": "ลืออำนาจ",
+        "count": 5826
+    },
+    {
+        "province": "อำนาจเจริญ",
+        "district": "หัวตะพาน",
+        "count": 7418
+    },
+    {
+        "province": "อำนาจเจริญ",
+        "district": "เมืองอำนาจเจริญ",
+        "count": 28435
+    },
+    {
+        "province": "อำนาจเจริญ",
+        "district": "เสนางคนิคม",
+        "count": 5551
+    },
+    {
+        "province": "อุดรธานี",
+        "district": "กุดจับ",
+        "count": 11208
+    },
+    {
+        "province": "อุดรธานี",
+        "district": "กุมภวาปี",
+        "count": 23311
+    },
+    {
+        "province": "อุดรธานี",
+        "district": "กู่แก้ว",
+        "count": 3191
+    },
+    {
+        "province": "อุดรธานี",
+        "district": "ทุ่งฝน",
+        "count": 4552
+    },
+    {
+        "province": "อุดรธานี",
+        "district": "นายูง",
+        "count": 5102
+    },
+    {
+        "province": "อุดรธานี",
+        "district": "น้ำโสม",
+        "count": 10791
+    },
+    {
+        "province": "อุดรธานี",
+        "district": "บ้านดุง",
+        "count": 26809
+    },
+    {
+        "province": "อุดรธานี",
+        "district": "บ้านผือ",
+        "count": 20234
+    },
+    {
+        "province": "อุดรธานี",
+        "district": "ประจักษ์ศิลปาคม",
+        "count": 3784
+    },
+    {
+        "province": "อุดรธานี",
+        "district": "พิบูลย์รักษ์",
+        "count": 4210
+    },
+    {
+        "province": "อุดรธานี",
+        "district": "วังสามหมอ",
+        "count": 10102
+    },
+    {
+        "province": "อุดรธานี",
+        "district": "ศรีธาตุ",
+        "count": 7642
+    },
+    {
+        "province": "อุดรธานี",
+        "district": "สร้างคอม",
+        "count": 4656
+    },
+    {
+        "province": "อุดรธานี",
+        "district": "หนองวัวซอ",
+        "count": 9098
+    },
+    {
+        "province": "อุดรธานี",
+        "district": "หนองหาน",
+        "count": 22296
+    },
+    {
+        "province": "อุดรธานี",
+        "district": "หนองแสง",
+        "count": 4885
+    },
+    {
+        "province": "อุดรธานี",
+        "district": "เพ็ญ",
+        "count": 18223
+    },
+    {
+        "province": "อุดรธานี",
+        "district": "เมืองอุดรธานี",
+        "count": 88154
+    },
+    {
+        "province": "อุดรธานี",
+        "district": "โนนสะอาด",
+        "count": 7693
+    },
+    {
+        "province": "อุดรธานี",
+        "district": "ไชยวาน",
+        "count": 5934
+    },
+    {
+        "province": "อุตรดิตถ์",
+        "district": "ตรอน",
+        "count": 3795
+    },
+    {
+        "province": "อุตรดิตถ์",
+        "district": "ทองแสนขัน",
+        "count": 2888
+    },
+    {
+        "province": "อุตรดิตถ์",
+        "district": "ท่าปลา",
+        "count": 5018
+    },
+    {
+        "province": "อุตรดิตถ์",
+        "district": "น้ำปาด",
+        "count": 5922
+    },
+    {
+        "province": "อุตรดิตถ์",
+        "district": "บ้านโคก",
+        "count": 2424
+    },
+    {
+        "province": "อุตรดิตถ์",
+        "district": "พิชัย",
+        "count": 10810
+    },
+    {
+        "province": "อุตรดิตถ์",
+        "district": "ฟากท่า",
+        "count": 2335
+    },
+    {
+        "province": "อุตรดิตถ์",
+        "district": "ลับแล",
+        "count": 4462
+    },
+    {
+        "province": "อุตรดิตถ์",
+        "district": "เมืองอุตรดิตถ์",
+        "count": 29392
+    },
+    {
+        "province": "อุทัยธานี",
+        "district": "ทัพทัน",
+        "count": 4988
+    },
+    {
+        "province": "อุทัยธานี",
+        "district": "บ้านไร่",
+        "count": 11053
+    },
+    {
+        "province": "อุทัยธานี",
+        "district": "ลานสัก",
+        "count": 7929
+    },
+    {
+        "province": "อุทัยธานี",
+        "district": "สว่างอารมณ์",
+        "count": 4518
+    },
+    {
+        "province": "อุทัยธานี",
+        "district": "หนองขาหย่าง",
+        "count": 1604
+    },
+    {
+        "province": "อุทัยธานี",
+        "district": "หนองฉาง",
+        "count": 11050
+    },
+    {
+        "province": "อุทัยธานี",
+        "district": "ห้วยคต",
+        "count": 2538
+    },
+    {
+        "province": "อุทัยธานี",
+        "district": "เมืองอุทัยธานี",
+        "count": 11500
+    },
+    {
+        "province": "อุบลราชธานี",
+        "district": "กุดข้าวปุ้น",
+        "count": 6455
+    },
+    {
+        "province": "อุบลราชธานี",
+        "district": "ดอนมดแดง",
+        "count": 4494
+    },
+    {
+        "province": "อุบลราชธานี",
+        "district": "ตระการพืชผล",
+        "count": 21545
+    },
+    {
+        "province": "อุบลราชธานี",
+        "district": "ตาลสุม",
+        "count": 5267
+    },
+    {
+        "province": "อุบลราชธานี",
+        "district": "ทุ่งศรีอุดม",
+        "count": 5259
+    },
+    {
+        "province": "อุบลราชธานี",
+        "district": "นาจะหลวย",
+        "count": 10830
+    },
+    {
+        "province": "อุบลราชธานี",
+        "district": "นาตาล",
+        "count": 6580
+    },
+    {
+        "province": "อุบลราชธานี",
+        "district": "นาเยีย",
+        "count": 4998
+    },
+    {
+        "province": "อุบลราชธานี",
+        "district": "น้ำขุ่น",
+        "count": 5455
+    },
+    {
+        "province": "อุบลราชธานี",
+        "district": "น้ำยืน",
+        "count": 15365
+    },
+    {
+        "province": "อุบลราชธานี",
+        "district": "บุณฑริก",
+        "count": 17946
+    },
+    {
+        "province": "อุบลราชธานี",
+        "district": "พิบูลมังสาหาร",
+        "count": 21323
+    },
+    {
+        "province": "อุบลราชธานี",
+        "district": "ม่วงสามสิบ",
+        "count": 12981
+    },
+    {
+        "province": "อุบลราชธานี",
+        "district": "วารินชำราบ",
+        "count": 20935
+    },
+    {
+        "province": "อุบลราชธานี",
+        "district": "ศรีเมืองใหม่",
+        "count": 13374
+    },
+    {
+        "province": "อุบลราชธานี",
+        "district": "สว่างวีระวงศ์",
+        "count": 4194
+    },
+    {
+        "province": "อุบลราชธานี",
+        "district": "สำโรง",
+        "count": 8590
+    },
+    {
+        "province": "อุบลราชธานี",
+        "district": "สิรินธร",
+        "count": 9761
+    },
+    {
+        "province": "อุบลราชธานี",
+        "district": "เขมราฐ",
+        "count": 18656
+    },
+    {
+        "province": "อุบลราชธานี",
+        "district": "เขื่องใน",
+        "count": 15888
+    },
+    {
+        "province": "อุบลราชธานี",
+        "district": "เดชอุดม",
+        "count": 33972
+    },
+    {
+        "province": "อุบลราชธานี",
+        "district": "เมืองอุบลราชธานี",
+        "count": 60571
+    },
+    {
+        "province": "อุบลราชธานี",
+        "district": "เหล่าเสือโก้ก",
+        "count": 3930
+    },
+    {
+        "province": "อุบลราชธานี",
+        "district": "โขงเจียม",
+        "count": 6949
+    },
+    {
+        "province": "อุบลราชธานี",
+        "district": "โพธิ์ไทร",
+        "count": 8709
+    },
+    {
+        "province": "อ่างทอง",
+        "district": "ป่าโมก",
+        "count": 4551
+    },
+    {
+        "province": "อ่างทอง",
+        "district": "วิเศษชัยชาญ",
+        "count": 9695
+    },
+    {
+        "province": "อ่างทอง",
+        "district": "สามโก้",
+        "count": 1975
+    },
+    {
+        "province": "อ่างทอง",
+        "district": "เมืองอ่างทอง",
+        "count": 15155
+    },
+    {
+        "province": "อ่างทอง",
+        "district": "แสวงหา",
+        "count": 3950
+    },
+    {
+        "province": "อ่างทอง",
+        "district": "โพธิ์ทอง",
+        "count": 6470
+    },
+    {
+        "province": "อ่างทอง",
+        "district": "ไชโย",
+        "count": 2960
+    },
+    {
+        "province": "เชียงราย",
+        "district": "ขุนตาล",
+        "count": 3372
+    },
+    {
+        "province": "เชียงราย",
+        "district": "ดอยหลวง",
+        "count": 2403
+    },
+    {
+        "province": "เชียงราย",
+        "district": "ป่าแดด",
+        "count": 2907
+    },
+    {
+        "province": "เชียงราย",
+        "district": "พญาเม็งราย",
+        "count": 5616
+    },
+    {
+        "province": "เชียงราย",
+        "district": "พาน",
+        "count": 11648
+    },
+    {
+        "province": "เชียงราย",
+        "district": "เชียงของ",
+        "count": 9438
+    },
+    {
+        "province": "เชียงราย",
+        "district": "เชียงแสน",
+        "count": 8319
+    },
+    {
+        "province": "เชียงราย",
+        "district": "เทิง",
+        "count": 14108
+    },
+    {
+        "province": "เชียงราย",
+        "district": "เมืองเชียงราย",
+        "count": 52125
+    },
+    {
+        "province": "เชียงราย",
+        "district": "เวียงชัย",
+        "count": 4049
+    },
+    {
+        "province": "เชียงราย",
+        "district": "เวียงป่าเป้า",
+        "count": 11699
+    },
+    {
+        "province": "เชียงราย",
+        "district": "เวียงเชียงรุ้ง",
+        "count": 3776
+    },
+    {
+        "province": "เชียงราย",
+        "district": "เวียงแก่น",
+        "count": 7954
+    },
+    {
+        "province": "เชียงราย",
+        "district": "แม่จัน",
+        "count": 13485
+    },
+    {
+        "province": "เชียงราย",
+        "district": "แม่ฟ้าหลวง",
+        "count": 15224
+    },
+    {
+        "province": "เชียงราย",
+        "district": "แม่ลาว",
+        "count": 3113
+    },
+    {
+        "province": "เชียงราย",
+        "district": "แม่สรวย",
+        "count": 15057
+    },
+    {
+        "province": "เชียงราย",
+        "district": "แม่สาย",
+        "count": 21068
+    },
+    {
+        "province": "เชียงใหม่",
+        "district": "กัลยาณิวัฒนา",
+        "count": 2986
+    },
+    {
+        "province": "เชียงใหม่",
+        "district": "จอมทอง",
+        "count": 11325
+    },
+    {
+        "province": "เชียงใหม่",
+        "district": "ดอยสะเก็ด",
+        "count": 7344
+    },
+    {
+        "province": "เชียงใหม่",
+        "district": "ดอยหล่อ",
+        "count": 2734
+    },
+    {
+        "province": "เชียงใหม่",
+        "district": "ดอยเต่า",
+        "count": 3945
+    },
+    {
+        "province": "เชียงใหม่",
+        "district": "ฝาง",
+        "count": 25826
+    },
+    {
+        "province": "เชียงใหม่",
+        "district": "พร้าว",
+        "count": 5893
+    },
+    {
+        "province": "เชียงใหม่",
+        "district": "สะเมิง",
+        "count": 4095
+    },
+    {
+        "province": "เชียงใหม่",
+        "district": "สันกำแพง",
+        "count": 9998
+    },
+    {
+        "province": "เชียงใหม่",
+        "district": "สันทราย",
+        "count": 16142
+    },
+    {
+        "province": "เชียงใหม่",
+        "district": "สันป่าตอง",
+        "count": 9965
+    },
+    {
+        "province": "เชียงใหม่",
+        "district": "สารภี",
+        "count": 14932
+    },
+    {
+        "province": "เชียงใหม่",
+        "district": "หางดง",
+        "count": 9884
+    },
+    {
+        "province": "เชียงใหม่",
+        "district": "อมก๋อย",
+        "count": 12335
+    },
+    {
+        "province": "เชียงใหม่",
+        "district": "ฮอด",
+        "count": 7148
+    },
+    {
+        "province": "เชียงใหม่",
+        "district": "เชียงดาว",
+        "count": 17749
+    },
+    {
+        "province": "เชียงใหม่",
+        "district": "เมืองเชียงใหม่",
+        "count": 79388
+    },
+    {
+        "province": "เชียงใหม่",
+        "district": "เวียงแหง",
+        "count": 5299
+    },
+    {
+        "province": "เชียงใหม่",
+        "district": "แม่ริม",
+        "count": 13014
+    },
+    {
+        "province": "เชียงใหม่",
+        "district": "แม่วาง",
+        "count": 4675
+    },
+    {
+        "province": "เชียงใหม่",
+        "district": "แม่ออน",
+        "count": 3054
+    },
+    {
+        "province": "เชียงใหม่",
+        "district": "แม่อาย",
+        "count": 12864
+    },
+    {
+        "province": "เชียงใหม่",
+        "district": "แม่แจ่ม",
+        "count": 11609
+    },
+    {
+        "province": "เชียงใหม่",
+        "district": "แม่แตง",
+        "count": 10659
+    },
+    {
+        "province": "เชียงใหม่",
+        "district": "ไชยปราการ",
+        "count": 7083
+    },
+    {
+        "province": "เพชรบุรี",
+        "district": "ชะอำ",
+        "count": 11366
+    },
+    {
+        "province": "เพชรบุรี",
+        "district": "ท่ายาง",
+        "count": 9374
+    },
+    {
+        "province": "เพชรบุรี",
+        "district": "บ้านลาด",
+        "count": 6086
+    },
+    {
+        "province": "เพชรบุรี",
+        "district": "บ้านแหลม",
+        "count": 5201
+    },
+    {
+        "province": "เพชรบุรี",
+        "district": "หนองหญ้าปล้อง",
+        "count": 2241
+    },
+    {
+        "province": "เพชรบุรี",
+        "district": "เขาย้อย",
+        "count": 5081
+    },
+    {
+        "province": "เพชรบุรี",
+        "district": "เมืองเพชรบุรี",
+        "count": 35360
+    },
+    {
+        "province": "เพชรบุรี",
+        "district": "แก่งกระจาน",
+        "count": 6762
+    },
+    {
+        "province": "เพชรบูรณ์",
+        "district": "ชนแดน",
+        "count": 13216
+    },
+    {
+        "province": "เพชรบูรณ์",
+        "district": "น้ำหนาว",
+        "count": 3237
+    },
+    {
+        "province": "เพชรบูรณ์",
+        "district": "บึงสามพัน",
+        "count": 13731
+    },
+    {
+        "province": "เพชรบูรณ์",
+        "district": "วังโป่ง",
+        "count": 4235
+    },
+    {
+        "province": "เพชรบูรณ์",
+        "district": "วิเชียรบุรี",
+        "count": 18915
+    },
+    {
+        "province": "เพชรบูรณ์",
+        "district": "ศรีเทพ",
+        "count": 9487
+    },
+    {
+        "province": "เพชรบูรณ์",
+        "district": "หนองไผ่",
+        "count": 16962
+    },
+    {
+        "province": "เพชรบูรณ์",
+        "district": "หล่มสัก",
+        "count": 26014
+    },
+    {
+        "province": "เพชรบูรณ์",
+        "district": "หล่มเก่า",
+        "count": 10071
+    },
+    {
+        "province": "เพชรบูรณ์",
+        "district": "เขาค้อ",
+        "count": 6900
+    },
+    {
+        "province": "เพชรบูรณ์",
+        "district": "เมืองเพชรบูรณ์",
+        "count": 34040
+    },
+    {
+        "province": "เลย",
+        "district": "ด่านซ้าย",
+        "count": 9377
+    },
+    {
+        "province": "เลย",
+        "district": "ท่าลี่",
+        "count": 3992
+    },
+    {
+        "province": "เลย",
+        "district": "นาด้วง",
+        "count": 4332
+    },
+    {
+        "province": "เลย",
+        "district": "นาแห้ว",
+        "count": 2553
+    },
+    {
+        "province": "เลย",
+        "district": "ปากชม",
+        "count": 7832
+    },
+    {
+        "province": "เลย",
+        "district": "ผาขาว",
+        "count": 6419
+    },
+    {
+        "province": "เลย",
+        "district": "ภูกระดึง",
+        "count": 7501
+    },
+    {
+        "province": "เลย",
+        "district": "ภูหลวง",
+        "count": 3626
+    },
+    {
+        "province": "เลย",
+        "district": "ภูเรือ",
+        "count": 4383
+    },
+    {
+        "province": "เลย",
+        "district": "วังสะพุง",
+        "count": 18472
+    },
+    {
+        "province": "เลย",
+        "district": "หนองหิน",
+        "count": 6332
+    },
+    {
+        "province": "เลย",
+        "district": "เชียงคาน",
+        "count": 10113
+    },
+    {
+        "province": "เลย",
+        "district": "เมืองเลย",
+        "count": 29417
+    },
+    {
+        "province": "เลย",
+        "district": "เอราวัณ",
+        "count": 5229
+    },
+    {
+        "province": "แพร่",
+        "district": "ร้องกวาง",
+        "count": 5428
+    },
+    {
+        "province": "แพร่",
+        "district": "ลอง",
+        "count": 6351
+    },
+    {
+        "province": "แพร่",
+        "district": "วังชิ้น",
+        "count": 5140
+    },
+    {
+        "province": "แพร่",
+        "district": "สอง",
+        "count": 5767
+    },
+    {
+        "province": "แพร่",
+        "district": "สูงเม่น",
+        "count": 6522
+    },
+    {
+        "province": "แพร่",
+        "district": "หนองม่วงไข่",
+        "count": 1726
+    },
+    {
+        "province": "แพร่",
+        "district": "เด่นชัย",
+        "count": 3399
+    },
+    {
+        "province": "แพร่",
+        "district": "เมืองแพร่",
+        "count": 25846
+    },
+    {
+        "province": "แม่ฮ่องสอน",
+        "district": "ขุนยวม",
+        "count": 4468
+    },
+    {
+        "province": "แม่ฮ่องสอน",
+        "district": "ปางมะผ้า",
+        "count": 4559
+    },
+    {
+        "province": "แม่ฮ่องสอน",
+        "district": "ปาย",
+        "count": 7259
+    },
+    {
+        "province": "แม่ฮ่องสอน",
+        "district": "สบเมย",
+        "count": 8117
+    },
+    {
+        "province": "แม่ฮ่องสอน",
+        "district": "เมืองแม่ฮ่องสอน",
+        "count": 10407
+    },
+    {
+        "province": "แม่ฮ่องสอน",
+        "district": "แม่ลาน้อย",
+        "count": 7018
+    },
+    {
+        "province": "แม่ฮ่องสอน",
+        "district": "แม่สะเรียง",
+        "count": 12572
+    }
+];
 
         const engToThai = {
             "Bangkok": "กรุงเทพมหานคร", "Krung Thep Maha Nakhon": "กรุงเทพมหานคร", "Phra Nakhon": "กรุงเทพมหานคร", "Bangkok Metropolis": "กรุงเทพมหานคร",
@@ -264,20 +4976,12 @@
 
         document.getElementById('total-students-count').innerText = grandTotalStudents.toLocaleString() + " students";
 
-        // 20-step high-contrast palette
-        const palette = [
-            "#f7fbff", "#f1f7fc", "#ebf3f9", "#e5eff6", "#deebf2", 
-            "#d8e7ef", "#d2e3eb", "#ccdfe8", "#c6dbe5", "#c0d7e1",
-            "#9ecae1", "#8cc1dd", "#79b8d9", "#67afd5", "#55a6d1",
-            "#429dcd", "#3094c9", "#1d8bc5", "#0b82c1", "#08306b"
-        ];
+        const palette = ["#f7fbff", "#f1f7fc", "#ebf3f9", "#e5eff6", "#deebf2", "#d8e7ef", "#d2e3eb", "#ccdfe8", "#c6dbe5", "#c0d7e1", "#9ecae1", "#8cc1dd", "#79b8d9", "#67afd5", "#55a6d1", "#429dcd", "#3094c9", "#1d8bc5", "#0b82c1", "#08306b"];
 
         function getScaleSteps(arr, stepsCount) {
             const sorted = [...arr].sort((a, b) => a - b);
             const steps = [];
-            for (let i = 0; i < stepsCount; i++) {
-                steps.push(sorted[Math.floor((i / stepsCount) * sorted.length)]);
-            }
+            for (let i = 0; i < stepsCount; i++) steps.push(sorted[Math.floor((i / stepsCount) * sorted.length)]);
             return steps;
         }
 
@@ -285,34 +4989,11 @@
         const populationSteps = getScaleSteps(provincesData.map(p => p.count), 20);
 
         function getColor(value, steps) {
-            for (let i = steps.length - 1; i >= 0; i--) {
-                if (value >= steps[i]) return palette[i];
-            }
+            for (let i = steps.length - 1; i >= 0; i--) if (value >= steps[i]) return palette[i];
             return palette[0];
         }
 
-        // Initialize Map with specific check
-        const map = L.map('map', { 
-            zoomSnap: 0.1, 
-            center: [13.7367, 100.5231], 
-            zoom: 6,
-            trackResize: true
-        });
-
-        /**
-         * Safely performs fitBounds only if the LatLng values are valid to prevent NaN errors.
-         */
-        function safeFitBounds(bounds, options = {}) {
-            if (!bounds || typeof bounds.isValid !== 'function' || !bounds.isValid()) return;
-            const center = bounds.getCenter();
-            if (!center || isNaN(center.lat) || isNaN(center.lng)) return;
-            
-            try {
-                map.fitBounds(bounds, { animate: true, duration: 1, ...options });
-            } catch (e) {
-                console.warn("fitBounds calculation failed:", e);
-            }
-        }
+        const map = L.map('map', { zoomSnap: 0.1, center: [13.7367, 100.5231], zoom: 6, trackResize: true });
 
         function findProvinceData(feature) {
             const props = feature.properties || {};
@@ -320,7 +5001,7 @@
             for (let engName of namesToTry) {
                 const cleanEngName = engName.replace('Changwat ', '').trim();
                 const thaiMappedName = engToThai[cleanEngName] || cleanEngName;
-                const found = provincesData.find(p => p.name === thaiMappedName || p.name === cleanEngName || p.name.includes(thaiMappedName) || thaiMappedName.includes(p.name));
+                const found = provincesData.find(p => p.name === thaiMappedName);
                 if (found) return found;
             }
             return null;
@@ -328,6 +5009,9 @@
 
         let densityLayer, populationLayer;
         let currentMode = 'density';
+        let districtChartInstance = null;
+        let currentActiveDistricts = [];
+        let currentSearchQuery = '';
 
         function styleFeature(feature, mode) {
             const pData = findProvinceData(feature);
@@ -339,20 +5023,12 @@
         function onEachFeature(feature, layer) {
             const pData = findProvinceData(feature);
             layer.on({
-                mouseover: (e) => {
-                    e.target.setStyle({ weight: 3, color: '#3b82f6', fillOpacity: 1 });
-                    e.target.bringToFront();
-                },
+                mouseover: (e) => { e.target.setStyle({ weight: 3, color: '#3b82f6', fillOpacity: 1 }); e.target.bringToFront(); },
                 mouseout: (e) => {
                     const activeLayer = currentMode === 'density' ? densityLayer : populationLayer;
                     if (activeLayer) activeLayer.resetStyle(e.target);
                 },
-                click: (e) => {
-                    if (pData) {
-                        scrollToProvince(pData.name);
-                        safeFitBounds(e.target.getBounds());
-                    }
-                }
+                click: (e) => { if (pData) switchToDistrictView(pData.name); }
             });
 
             if (pData) {
@@ -370,63 +5046,179 @@
         }
 
         function updateLegend() {
-            const title = document.getElementById('legend-title');
-            if (title) {
-                title.innerText = currentMode === 'density' ? "Student Density" : "Student Population";
-            }
-            const activeText = document.getElementById('active-layer-text');
-            if (activeText) {
-                activeText.innerText = currentMode === 'density' ? "Student Density Layer" : "Student Population Layer";
-            }
+            document.getElementById('legend-title').innerText = currentMode === 'density' ? "Student Density" : "Student Population";
+            document.getElementById('active-layer-text').innerText = currentMode === 'density' ? "Student Density Layer" : "Student Population Layer";
         }
 
-        // Use requestAnimationFrame and DOM check
+        function switchToDistrictView(provinceName) {
+            const mainView = document.getElementById('main-view');
+            const districtView = document.getElementById('district-view');
+            const districtTitle = document.getElementById('district-view-title');
+            const districtSearchInput = document.getElementById('districtSearch');
+
+            districtTitle.innerText = "จังหวัด" + provinceName;
+            mainView.classList.add('hidden-view');
+            districtView.classList.remove('hidden-view');
+            window.scrollTo(0, 0);
+
+            currentActiveDistricts = mockDistrictData.filter(d => d.province === provinceName);
+            districtSearchInput.value = ''; 
+            currentSearchQuery = '';
+            renderDistrictPage();
+        }
+
+        function renderDistrictPage() {
+            const districtList = document.getElementById('district-list');
+            const districtSearchInput = document.getElementById('districtSearch');
+            const query = currentSearchQuery.toLowerCase().trim();
+            
+            // Re-render chart first to get the latest colors
+            renderDistrictChart(currentActiveDistricts, query);
+
+            districtList.innerHTML = '';
+            if (currentActiveDistricts.length === 0) {
+                districtList.innerHTML = `<div class="p-8 text-center text-slate-400 bg-slate-50 rounded-3xl border border-dashed border-slate-200">ไม่มีข้อมูลรายอำเภอสำหรับจังหวัดนี้</div>`;
+                return;
+            }
+
+            // Always show full list, but highlight if clicked
+            currentActiveDistricts.sort((a, b) => b.count - a.count).forEach((d, idx) => {
+                const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#71717a'];
+                const originalIdx = currentActiveDistricts.findIndex(orig => orig.district === d.district);
+                const color = colors[originalIdx % colors.length];
+                const isActive = query && d.district.toLowerCase().includes(query);
+                
+                const item = document.createElement('div');
+                item.className = `flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100 cursor-pointer hover:bg-white hover:shadow-md transition-all animate-in slide-in-from-bottom-1 duration-300 ${isActive ? 'district-item-active' : ''}`;
+                
+                item.innerHTML = `
+                    <div class="flex items-center gap-4">
+                        <div class="w-2.5 h-2.5 rounded-full" style="background-color: ${color}"></div>
+                        <span class="font-bold text-slate-700 text-sm">อ.${d.district}</span>
+                    </div>
+                    <span class="font-mono font-bold text-blue-600 text-sm">${d.count.toLocaleString()} students</span>
+                `;
+
+                // Add Click Listener to item
+                item.onclick = () => {
+                    if (currentSearchQuery === d.district) {
+                        currentSearchQuery = '';
+                        districtSearchInput.value = '';
+                    } else {
+                        currentSearchQuery = d.district;
+                        districtSearchInput.value = d.district;
+                    }
+                    renderDistrictPage(); // Refresh to update list state and chart
+                };
+
+                districtList.appendChild(item);
+            });
+        }
+
+        document.getElementById('districtSearch').addEventListener('input', (e) => {
+            currentSearchQuery = e.target.value;
+            renderDistrictPage();
+        });
+
+        function backToMainView() {
+            document.getElementById('main-view').classList.remove('hidden-view');
+            document.getElementById('district-view').classList.add('hidden-view');
+            setTimeout(() => map.invalidateSize(), 100);
+        }
+
+        function renderDistrictChart(allData, query) {
+            const ctx = document.getElementById('districtChart').getContext('2d');
+            if (districtChartInstance) districtChartInstance.destroy();
+
+            const total = allData.reduce((sum, d) => sum + d.count, 0);
+            const colorsPalette = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#71717a'];
+            const inactiveColor = '#e2e8f0';
+
+            const labels = allData.map(d => d.district);
+            const values = allData.map(d => d.count);
+            
+            const backgroundColors = allData.map((d, idx) => {
+                if (!query) return colorsPalette[idx % colorsPalette.length];
+                return d.district.toLowerCase().includes(query) ? colorsPalette[idx % colorsPalette.length] : inactiveColor;
+            });
+
+            districtChartInstance = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        data: values,
+                        backgroundColor: backgroundColors,
+                        borderWidth: 2,
+                        borderColor: '#ffffff',
+                        hoverOffset: 15
+                    }]
+                },
+                plugins: [ChartDataLabels],
+                options: {
+                    cutout: '72%',
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    animation: { duration: 400 },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                            titleColor: '#1e293b',
+                            bodyColor: '#475569',
+                            borderColor: '#e2e8f0',
+                            borderWidth: 1,
+                            padding: 12,
+                            callbacks: {
+                                label: (context) => ` อ.${context.label}: ${context.raw.toLocaleString()} students (${((context.raw / total) * 100).toFixed(1)}%)`
+                            }
+                        },
+                        datalabels: {
+                            color: (context) => (query && context.chart.data.labels[context.dataIndex].toLowerCase().includes(query)) ? '#1e293b' : '#ffffff',
+                            font: { weight: 'bold', family: 'Plus Jakarta Sans', size: 10 },
+                            formatter: (value, context) => {
+                                const districtName = context.chart.data.labels[context.dataIndex];
+                                if (query) {
+                                    return districtName.toLowerCase().includes(query) ? ((value / total) * 100).toFixed(1) + '%' : null;
+                                } else {
+                                    const sorted = [...allData].sort((a,b) => b.count - a.count);
+                                    const top3 = sorted.slice(0, 3).map(s => s.district);
+                                    return top3.includes(districtName) ? ((value / total) * 100).toFixed(1) + '%' : null;
+                                }
+                            },
+                            display: 'auto',
+                            anchor: 'center',
+                            align: 'center'
+                        }
+                    }
+                }
+            });
+        }
+
         window.addEventListener('load', () => {
             fetch('https://raw.githubusercontent.com/apisit/thailand.json/master/thailand.json')
                 .then(res => res.json())
                 .then(data => {
-                    // Filter geometry issues
-                    if (data && data.features) {
-                        data.features = data.features.filter(f => f.geometry && f.geometry.coordinates);
-                    }
-
+                    if (data && data.features) data.features = data.features.filter(f => f.geometry && f.geometry.coordinates);
                     densityLayer = L.geoJson(data, { style: (f) => styleFeature(f, 'density'), onEachFeature: onEachFeature });
                     populationLayer = L.geoJson(data, { style: (f) => styleFeature(f, 'population'), onEachFeature: onEachFeature });
-
                     densityLayer.addTo(map);
-                    
-                    const overlays = { "Show Student Density": densityLayer, "Show Student Population": populationLayer };
-                    L.control.layers(overlays, null, { collapsed: false, position: 'topright' }).addTo(map);
-
-                    map.on('baselayerchange', (e) => {
-                        currentMode = e.name.includes('Density') ? 'density' : 'population';
-                        updateLegend();
-                    });
-
+                    L.control.layers({ "Show Student Density": densityLayer, "Show Student Population": populationLayer }, null, { collapsed: false, position: 'topright' }).addTo(map);
+                    map.on('baselayerchange', (e) => { currentMode = e.name.includes('Density') ? 'density' : 'population'; updateLegend(); });
                     updateLegend();
-                    
-                    // Final map sync
                     requestAnimationFrame(() => {
-                        map.invalidateSize({ animate: false });
+                        map.invalidateSize();
                         const bounds = densityLayer.getBounds();
-                        if (bounds && bounds.isValid()) {
-                            map.fitBounds(bounds, { padding: [20, 20], animate: false });
-                        }
+                        if (bounds && bounds.isValid()) map.fitBounds(bounds, { padding: [20, 20] });
                     });
-                })
-                .catch(err => {
-                    console.error("GeoJSON failed to load", err);
-                    map.setView([13.7367, 100.5231], 6);
                 });
         });
 
-        const tableBody = document.getElementById('provinceTableBody');
         function renderTable(data) {
-            if (!tableBody) return;
+            const tableBody = document.getElementById('provinceTableBody');
             tableBody.innerHTML = '';
             data.sort((a, b) => b.density - a.density).forEach(p => {
                 const row = document.createElement('tr');
-                row.id = `row-${p.name}`;
                 row.className = 'hover:bg-slate-50 transition-colors cursor-pointer group';
                 row.innerHTML = `
                     <td class="px-6 py-4 font-semibold text-slate-800 group-hover:text-blue-600 transition-colors">${p.name}</td>
@@ -434,44 +5226,15 @@
                     <td class="px-6 py-4 text-right text-slate-600 font-mono text-xs font-bold">${p.area.toLocaleString()} km²</td>
                     <td class="px-6 py-4 text-right font-black text-blue-700 font-mono">${p.density.toFixed(2)} students/km²</td>
                 `;
-                row.onclick = () => highlightOnMap(p.name);
+                row.onclick = () => switchToDistrictView(p.name);
                 tableBody.appendChild(row);
             });
         }
 
-        function highlightOnMap(name) {
-            const layer = currentMode === 'density' ? densityLayer : populationLayer;
-            if (!layer) return;
-            layer.eachLayer(l => {
-                const props = l.feature.properties || {};
-                const pName = (props.name || props.NAME_1 || "").replace('Changwat ', '').trim();
-                const thaiMappedName = engToThai[pName] || pName;
-                if (thaiMappedName === name || name.includes(thaiMappedName)) {
-                    l.setStyle({ weight: 5, color: '#fbbf24' });
-                    safeFitBounds(l.getBounds());
-                    window.scrollTo({ top: 0, behavior: 'smooth' });
-                    setTimeout(() => layer.resetStyle(l), 3000);
-                }
-            });
-        }
-
-        function scrollToProvince(name) {
-            const el = document.getElementById(`row-${name}`);
-            if (el) {
-                el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                el.classList.add('highlight-row');
-                setTimeout(() => el.classList.remove('highlight-row'), 2000);
-            }
-        }
-
-        const tableSearch = document.getElementById('tableSearch');
-        if (tableSearch) {
-            tableSearch.addEventListener('input', (e) => {
-                const val = e.target.value.toLowerCase();
-                const filtered = provincesData.filter(p => p.name.toLowerCase().includes(val));
-                renderTable(filtered);
-            });
-        }
+        document.getElementById('tableSearch').addEventListener('input', (e) => {
+            const val = e.target.value.toLowerCase();
+            renderTable(provincesData.filter(p => p.name.toLowerCase().includes(val)));
+        });
 
         renderTable(provincesData);
     </script>
